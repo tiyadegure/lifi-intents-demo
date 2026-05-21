@@ -8,7 +8,12 @@ Usage:
 
 import sys
 import json
+import os
+from pathlib import Path
 from .mcp_client import MCPClient
+
+# ── Preferences storage ────────────────────────────────────────────
+PREFS_FILE = Path.home() / ".lifi_agent_prefs.json"
 
 # ── Chain registry ──────────────────────────────────────────────────
 CHAINS = {
@@ -140,8 +145,39 @@ class LifAgent:
     def __init__(self):
         self.mcp = MCPClient()
         self.history: list[dict] = []
-        self.preferences: dict = {"default_chain": None, "default_token": "usdc"}
-        self.pending_order: dict = {}  # Store pending order for confirmation
+        self.preferences: dict = {"default_chain": None, "default_token": "usdc", "favorite_routes": []}
+        self.pending_order: dict = {}
+        self._load_prefs()
+
+    def _load_prefs(self):
+        """Load preferences from disk."""
+        if PREFS_FILE.exists():
+            try:
+                with open(PREFS_FILE) as f:
+                    saved = json.load(f)
+                    self.preferences.update(saved)
+            except Exception:
+                pass
+
+    def _save_prefs(self):
+        """Save preferences to disk."""
+        try:
+            with open(PREFS_FILE, "w") as f:
+                json.dump(self.preferences, f, indent=2)
+        except Exception:
+            pass
+
+    def remember_route(self, from_chain: str, to_chain: str, token: str):
+        """Remember a frequently used route."""
+        route = f"{from_chain}:{to_chain}:{token}"
+        favs = self.preferences.get("favorite_routes", [])
+        if route not in favs:
+            favs.append(route)
+            self.preferences["favorite_routes"] = favs[-10:]  # Keep last 10
+            self._save_prefs()
+
+    def get_favorite_routes(self) -> list[str]:
+        return self.preferences.get("favorite_routes", [])
 
     def connect(self):
         info = self.mcp.connect()
@@ -262,6 +298,7 @@ def interactive():
     print("  compare 10 USDC from Ethereum       — Compare quotes across chains")
     print("  routes                               — Show supported routes")
     print("  orders                               — Show recent orders")
+    print("  favorites                            — Show saved routes")
     print("  yes / confirm                        — Confirm pending order")
     print("  quit                                 — Exit")
     print()
@@ -296,6 +333,9 @@ def interactive():
                         print(f"    Order ID: {order.get('id', '?')}")
                         print(f"    Status: {order.get('status', '?')}")
                         agent.pending_order = order
+                        # Remember this route
+                        agent.remember_route(pending_intent.from_chain, pending_intent.to_chain, pending_intent.token)
+                        print(f"    Route saved to favorites!")
                 else:
                     print("  ✗ No quote ID available")
             else:
@@ -347,6 +387,18 @@ def interactive():
             else:
                 for o in orders:
                     print(f"  {o.get('id', '?')} — {o.get('status', '?')}")
+            print()
+            continue
+
+        if text == "favorites":
+            favs = agent.get_favorite_routes()
+            if favs:
+                print(f"\n  Saved routes:")
+                for i, r in enumerate(favs, 1):
+                    parts = r.split(":")
+                    print(f"    {i}. {parts[0].title()} → {parts[1].title()} ({parts[2].upper()})")
+            else:
+                print("\n  No saved routes yet. Execute a transfer to save it.")
             print()
             continue
 
