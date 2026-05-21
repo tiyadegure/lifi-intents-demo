@@ -140,6 +140,8 @@ class LifAgent:
     def __init__(self):
         self.mcp = MCPClient()
         self.history: list[dict] = []
+        self.preferences: dict = {"default_chain": None, "default_token": "usdc"}
+        self.pending_order: dict = {}  # Store pending order for confirmation
 
     def connect(self):
         info = self.mcp.connect()
@@ -152,7 +154,6 @@ class LifAgent:
 
     def get_quote(self, intent: Intent) -> dict:
         """Get a cross-chain quote with route validation."""
-        # Check if route exists in supported routes
         routes_result = self.get_routes()
         route_list = routes_result.get("data", {}).get("routes", [])
         from_id = int(intent.from_chain_id())
@@ -175,13 +176,49 @@ class LifAgent:
         }
         result = self.mcp.call("request-quote", args)
 
-        # If quote fails with "Unknown token", suggest alternative
         raw = result.get("raw", "")
         if "Unknown token" in raw:
             result["suggestion"] = f"Token {intent.token.upper()} may not be available on {intent.from_chain}. Try: routes"
             result["error"] = raw
 
         return result
+
+    def compare_quotes(self, intent: Intent, chains: list[str] = None) -> list[dict]:
+        """Compare quotes across multiple destination chains."""
+        if chains is None:
+            chains = ["arbitrum", "optimism", "base", "polygon"]
+
+        results = []
+        for chain in chains:
+            if chain == intent.from_chain:
+                continue
+            try:
+                alt_intent = Intent(intent.from_chain, chain, intent.token, intent.amount, intent.address)
+                quote = self.get_quote(alt_intent)
+                quotes = quote.get("data", {}).get("quotes", [])
+                if quotes:
+                    q = quotes[0]
+                    results.append({
+                        "chain": chain,
+                        "output": q.get("outputAmount", "?"),
+                        "quote_id": q.get("quoteId", ""),
+                        "fee_pct": self._calc_fee(intent.amount, q.get("outputAmount", "0")),
+                    })
+            except Exception:
+                continue
+
+        results.sort(key=lambda x: float(x.get("fee_pct", "999")))
+        return results
+
+    def _calc_fee(self, input_amount: str, output_amount: str) -> str:
+        """Calculate fee percentage."""
+        try:
+            inp = float(input_amount)
+            out = float(output_amount.replace(",", ""))
+            fee = (inp - out) / inp * 100
+            return f"{fee:.3f}"
+        except (ValueError, ZeroDivisionError):
+            return "999"
 
     def prepare_order(self, quote_id: str, address: str = DEMO_ADDRESS) -> dict:
         """Prepare an order from a quote."""
@@ -201,7 +238,7 @@ class LifAgent:
 
 # ── Interactive CLI ─────────────────────────────────────────────────
 def interactive():
-    """Run interactive CLI mode."""
+    """Run interactive CLI mode with multi-turn conversation."""
     import readline  # noqa: F401 — enables arrow key history
 
     agent = LifAgent()
@@ -221,16 +258,21 @@ def interactive():
     print()
 
     print("Commands:")
-    print("  send 10 USDC from Base to Arbitrum")
-    print("  quote 50 USDT polygon to ethereum")
-    print("  routes")
-    print("  orders")
-    print("  quit")
+    print("  send 10 USDC from Base to Arbitrum  — Execute a transfer")
+    print("  compare 10 USDC from Ethereum       — Compare quotes across chains")
+    print("  routes                               — Show supported routes")
+    print("  orders                               — Show recent orders")
+    print("  yes / confirm                        — Confirm pending order")
+    print("  quit                                 — Exit")
     print()
+
+    pending_intent = None
+    pending_quote = None
 
     while True:
         try:
-            text = input("You > ").strip()
+            prompt = "Confirm > " if pending_intent else "You > "
+            text = input(prompt).strip()
         except (EOFError, KeyboardInterrupt):
             break
 
@@ -239,12 +281,59 @@ def interactive():
         if text in ("quit", "exit", "q"):
             break
 
-        # Handle commands
+        # ── Handle confirmation ────────────────────────────────
+        if pending_intent and text in ("yes", "y", "confirm", "ok"):
+            if pending_quote:
+                quote_id = pending_quote.get("quoteId", "")
+                if quote_id:
+                    print(f"\n  Preparing order...")
+                    result = agent.prepare_order(quote_id)
+                    if "error" in result:
+                        print(f"  ✗ {result['error']}")
+                    else:
+                        order = result.get("data", {})
+                        print(f"  ✓ Order prepared!")
+                        print(f"    Order ID: {order.get('id', '?')}")
+                        print(f"    Status: {order.get('status', '?')}")
+                        agent.pending_order = order
+                else:
+                    print("  ✗ No quote ID available")
+            else:
+                print("  ✗ No pending quote")
+            pending_intent = None
+            pending_quote = None
+            print()
+            continue
+
+        if pending_intent and text in ("no", "n", "cancel"):
+            print("\n  Cancelled.\n")
+            pending_intent = None
+            pending_quote = None
+            continue
+
+        # Cancel pending if new command
+        if pending_intent:
+            pending_intent = None
+            pending_quote = None
+
+        # ── Handle commands ────────────────────────────────────
         if text == "routes":
             result = agent.get_routes()
             count = result.get("data", {}).get("count", "?")
+            routes_list = result.get("data", {}).get("routes", [])
             msg = result.get("message", "")
             print(f"\n  ✓ {count} routes available")
+            if routes_list:
+                # Show unique chain pairs
+                pairs = set()
+                for r in routes_list:
+                    f = r.get("fromChain", "?")
+                    t = r.get("toChain", "?")
+                    pairs.add((f, t))
+                for f, t in sorted(pairs)[:15]:
+                    print(f"    {f} → {t}")
+                if len(pairs) > 15:
+                    print(f"    ... and {len(pairs)-15} more")
             if msg:
                 print(f"  {msg}")
             print()
@@ -261,7 +350,29 @@ def interactive():
             print()
             continue
 
-        # Parse intent
+        # ── Compare mode ───────────────────────────────────────
+        if text.startswith("compare"):
+            text = text.replace("compare", "send", 1)
+            try:
+                intent = parse_intent(text)
+            except ValueError as e:
+                print(f"\n  ✗ {e}\n")
+                continue
+
+            print(f"\n  Comparing quotes for {intent.amount} {intent.token.upper()} from {intent.from_chain.title()}...")
+            results = agent.compare_quotes(intent)
+            if results:
+                print(f"\n  ✓ Best routes (sorted by fee):\n")
+                for i, r in enumerate(results, 1):
+                    marker = " ← best" if i == 1 else ""
+                    print(f"    {i}. {intent.from_chain.title()} → {r['chain'].title()}")
+                    print(f"       Output: {r['output']} | Fee: ~{r['fee_pct']}%{marker}")
+                print()
+            else:
+                print("  ✗ No quotes available for comparison\n")
+            continue
+
+        # ── Parse intent ───────────────────────────────────────
         try:
             intent = parse_intent(text)
         except ValueError as e:
@@ -273,8 +384,12 @@ def interactive():
 
         result = agent.get_quote(intent)
 
+        # Handle errors with suggestions
         if "error" in result:
-            print(f"  ✗ Error: {result['error']}\n")
+            print(f"  ✗ {result['error']}")
+            if "suggestion" in result:
+                print(f"  💡 {result['suggestion']}")
+            print()
             continue
 
         quotes = result.get("data", {}).get("quotes", [])
@@ -284,12 +399,16 @@ def interactive():
             print(f"    Input:    {q.get('inputAmount', '?')}")
             print(f"    Output:   {q.get('outputAmount', '?')}")
             print(f"    Quote ID: {q.get('quoteId', '?')}")
-            msg = result.get("message", "")
-            if msg:
-                print(f"    {msg}")
+
+            # Store for confirmation
+            pending_intent = intent
+            pending_quote = q
+            print(f"\n  Type 'yes' to prepare order, 'no' to cancel")
         else:
-            print(f"  ✗ No quotes available")
-            print(f"    {result.get('message', '')}")
+            msg = result.get("message", "No quotes available")
+            print(f"  ✗ {msg}")
+            if "suggestion" in result:
+                print(f"  💡 {result['suggestion']}")
         print()
 
     agent.close()
