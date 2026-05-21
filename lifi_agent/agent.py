@@ -151,7 +151,20 @@ class LifAgent:
         return self.mcp.call("get-supported-routes", {})
 
     def get_quote(self, intent: Intent) -> dict:
-        """Get a cross-chain quote."""
+        """Get a cross-chain quote with route validation."""
+        # Check if route exists in supported routes
+        routes_result = self.get_routes()
+        route_list = routes_result.get("data", {}).get("routes", [])
+        from_id = int(intent.from_chain_id())
+        to_id = int(intent.to_chain_id())
+
+        if route_list:
+            matching = [r for r in route_list
+                        if r.get("fromChainId") == from_id and r.get("toChainId") == to_id
+                        and r.get("fromToken", {}).get("address", "").lower() == intent.from_token_address().lower()]
+            if not matching:
+                return {"error": f"No route found for {intent.from_chain} → {intent.to_chain} ({intent.token.upper()})"}
+
         args = {
             "fromChain": intent.from_chain_id(),
             "toChain": intent.to_chain_id(),
@@ -160,7 +173,15 @@ class LifAgent:
             "amount": intent.amount,
             "userAddress": intent.address,
         }
-        return self.mcp.call("request-quote", args)
+        result = self.mcp.call("request-quote", args)
+
+        # If quote fails with "Unknown token", suggest alternative
+        raw = result.get("raw", "")
+        if "Unknown token" in raw:
+            result["suggestion"] = f"Token {intent.token.upper()} may not be available on {intent.from_chain}. Try: routes"
+            result["error"] = raw
+
+        return result
 
     def prepare_order(self, quote_id: str, address: str = DEMO_ADDRESS) -> dict:
         """Prepare an order from a quote."""
