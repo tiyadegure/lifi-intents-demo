@@ -268,6 +268,37 @@ class LifAgent:
         """List recent orders."""
         return self.mcp.call("list-orders", {"limit": limit})
 
+    # ── Solver tools ────────────────────────────────────────────
+    def get_solver_identities(self) -> dict:
+        """List registered solver wallet addresses."""
+        return self.mcp.call("get-solver-identities", {})
+
+    def get_quote_inventory(self, from_chain: str, to_chain: str,
+                             from_asset: str, to_asset: str) -> dict:
+        """View standing quotes for a specific route."""
+        return self.mcp.call("get-quote-inventory", {
+            "fromChain": from_chain, "toChain": to_chain,
+            "fromAsset": from_asset, "toAsset": to_asset,
+        })
+
+    def submit_standing_quotes(self, quotes: list) -> dict:
+        """Submit or update standing quotes for solver."""
+        return self.mcp.call("submit-standing-quotes", {"quotes": quotes})
+
+    def check_route_health(self, from_chain: str, to_chain: str,
+                            from_asset: str = None, to_asset: str = None) -> dict:
+        """Check health of a specific route."""
+        args = {"fromChain": from_chain, "toChain": to_chain}
+        if from_asset:
+            args["fromAsset"] = from_asset
+        if to_asset:
+            args["toAsset"] = to_asset
+        return self.mcp.call("check-route-health", args)
+
+    def debug_order(self, order_id: str) -> dict:
+        """Get full order details for debugging."""
+        return self.mcp.call("debug-order", {"orderId": order_id})
+
     def close(self):
         self.mcp.close()
 
