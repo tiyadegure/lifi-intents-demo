@@ -323,6 +323,61 @@ def parse_intent(text: str) -> Intent:
     return Intent(from_chain, to_chain, token, amount)
 
 
+def parse_intent_llm(text: str, api_key: str = None, model: str = "gpt-4o-mini") -> Intent:
+    """Parse natural language using LLM for more flexible understanding.
+    
+    Requires OPENAI_API_KEY env var or api_key parameter.
+    Falls back to regex parser if LLM fails.
+    """
+    import httpx
+    
+    api_key = api_key or os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return parse_intent(text)  # Fallback to regex
+    
+    try:
+        response = httpx.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}"},
+            json={
+                "model": model,
+                "messages": [{
+                    "role": "system",
+                    "content": """Extract cross-chain transfer intent. Return JSON:
+{"from_chain": "base", "to_chain": "arbitrum", "token": "usdc", "amount": "10"}
+
+Supported chains: ethereum, base, arbitrum, optimism, polygon, bsc, avalanche, zksync, linea, scroll, blast, mantle, sonic
+Supported tokens: usdc, usdt, eth
+
+Examples:
+- "send 10 USDC base->arb" -> {"from_chain": "base", "to_chain": "arbitrum", "token": "usdc", "amount": "10"}
+- "bridge 50 USDT eth to poly" -> {"from_chain": "ethereum", "to_chain": "polygon", "token": "usdt", "amount": "50"}
+- "move 0.5 ETH from optimism" -> {"from_chain": "optimism", "to_chain": "arbitrum", "token": "eth", "amount": "0.5"}"""
+                }, {
+                    "role": "user",
+                    "content": text
+                }],
+                "temperature": 0,
+                "max_tokens": 100
+            },
+            timeout=5
+        )
+        
+        if response.status_code == 200:
+            result = response.json()["choices"][0]["message"]["content"]
+            data = json.loads(result)
+            return Intent(
+                from_chain=data["from_chain"],
+                to_chain=data["to_chain"],
+                token=data["token"],
+                amount=data["amount"]
+            )
+    except Exception as e:
+        logging.debug(f"LLM parsing failed, falling back to regex: {e}")
+    
+    return parse_intent(text)  # Fallback to regex
+
+
 # ── Agent ───────────────────────────────────────────────────────────
 class LifAgent:
     """AI Agent for cross-chain operations via LI.FI Intents MCP."""
@@ -533,6 +588,7 @@ def interactive():
     from prompt_toolkit.styles import Style as PTStyle
 
     agent = LifAgent()
+    use_llm = bool(os.environ.get("OPENAI_API_KEY"))
 
     # ── Welcome banner ────────────────────────────────────────────
     welcome_text = Text()
@@ -799,6 +855,23 @@ def interactive():
             console.print()
             continue
 
+        if text.startswith("llm"):
+            parts = text.split()
+            if len(parts) > 1 and parts[1] == "on":
+                if os.environ.get("OPENAI_API_KEY"):
+                    use_llm = True
+                    console.print("\n  [green]✓[/green] LLM mode enabled\n")
+                else:
+                    console.print("\n  [red]✗[/red] OPENAI_API_KEY not set\n")
+            elif len(parts) > 1 and parts[1] == "off":
+                use_llm = False
+                console.print("\n  [yellow]⚡[/yellow] LLM mode disabled\n")
+            else:
+                status = "ON" if use_llm else "OFF"
+                console.print(f"\n  LLM mode: {status}")
+                console.print("  Usage: llm on | llm off\n")
+            continue
+
         # ── Compare mode ───────────────────────────────────────
         if text.startswith("compare"):
             text = text.replace("compare", "send", 1)
@@ -833,7 +906,10 @@ def interactive():
 
         # ── Parse intent ───────────────────────────────────────
         try:
-            intent = parse_intent(text)
+            if use_llm:
+                intent = parse_intent_llm(text)
+            else:
+                intent = parse_intent(text)
         except ValueError as e:
             status_err(str(e))
             console.print()
