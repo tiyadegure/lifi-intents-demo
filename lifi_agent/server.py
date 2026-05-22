@@ -313,7 +313,7 @@ function renderCompare(results, intent) {
   let html = '<table class="compare-table"><tr><th>Destination</th><th>Output</th><th>Fee</th></tr>';
   results.forEach((r, i) => {
     html += '<tr><td>' + intent.from.charAt(0).toUpperCase() + intent.from.slice(1) + ' → ' +
-      r.chain.charAt(0).toUpperCase() + r.chain.slice(1) + '</td><td>' + r.output + '</td><td>~' + r.fee_pct + '%</td></tr>';
+      r.chain.charAt(0).toUpperCase() + r.chain.slice(1) + '</td><td>' + r.output + '</td><td>~' + Math.abs(parseFloat(r.fee_pct)).toFixed(2) + '%</td></tr>';
   });
   html += '</table>';
   el.innerHTML = html;
