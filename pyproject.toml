@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lifi-agent"
+version = "1.0.0"
+description = "AI agent for cross-chain operations via LI.FI Intents MCP"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = ["httpx>=0.27.0"]
+
+[project.optional-dependencies]
+web = ["fastapi>=0.115.0", "uvicorn>=0.30.0"]
+
+[project.scripts]
+lifi-agent = "lifi_agent.agent:interactive"
+
+[tool.hatch.build.targets.wheel]
+packages = ["lifi_agent"]
