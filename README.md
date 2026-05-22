@@ -1,157 +1,90 @@
 # LI.FI Intents × AI Agent
 
-> Cross-chain operations via natural language · Built for the [LI.FI Intents Builder Challenge](https://lifi.notion.site/LI-FI-Intents-Mini-Builder-Challenge-366f0ff14ac78168a0cdd9f44a3c1f13)
+一个基于 LI.FI Intents MCP 协议的 AI Agent，用自然语言就能跨链转账。
 
-## ✨ Features
+## ✨ 功能亮点
 
-- **Natural Language Intents** — `send 10 USDC base->arb`, `bridge 50 USDC eth to poly`
-- **MCP Integration** — Real-time quotes via LI.FI Intents MCP Server
-- **Web UI** — Dark-themed dashboard with quote comparison, solver analytics, and transaction tracking
-- **Rich CLI** — Auto-completion, color-coded output, interactive prompts
-- **SQLite Persistence** — Quote history survives across sessions
-- **Smart Retry** — Exponential backoff with rate limiting
-- **Async Support** — Parallel quote fetching for faster comparisons
+- 🤖 **AI 意图解析** - 自然语言 → 跨链操作
+- 🔗 **MCP 协议集成** - 直接调用 LI.FI Intents
+- 📊 **Web UI Dashboard** - 报价历史、统计面板、Solver 工具
+- 💻 **CLI 交互界面** - 终端操作，开发者友好
+- 📦 **Python SDK** - `pip install lifi-agent`
+- 🛠️ **Solver Tools** - Route Health、Quote Inventory、Become a Solver
 
-## 🚀 Quick Start
+## 🚀 快速开始
 
-```bash
-# Clone
-git clone https://github.com/tiyadegure/lifi-intents-demo
-cd lifi-intents-demo
-
-# Install
-pip install -e .
-
-# Run CLI
-python -m lifi_agent
-
-# Start Web UI
-uvicorn lifi_agent.server:app --port 8888
-```
-
-## 📖 Usage
-
-### CLI Commands
-
-| Command | Description |
-|---------|-------------|
-| `send 10 USDC base->arb` | Execute a cross-chain transfer |
-| `compare 50 USDC from Ethereum` | Compare quotes across chains |
-| `routes` | Show supported routes |
-| `orders` | Show recent orders |
-| `favorites` | Show saved routes |
-| `history` | Show recent quotes (SQLite) |
-| `stats` | Show quote statistics |
-| `wallet` | Show demo wallet info |
-| `quit` | Exit |
-
-### Input Formats
-
-```
-send 10 USDC from Base to Arbitrum
-bridge 50 USDC eth to poly
-transfer 100 USDC base->arb
-10 USDC base→arbitrum
-```
-
-## 🏗️ Architecture
-
-```
-User Input → Intent Parser → AI Agent → MCP Client → LI.FI MCP Server
-                ↓                              ↓
-           Chain Aliases              Rate Limiting + Cache
-                ↓                              ↓
-           Rich CLI/Web UI ←──── Quote Results + Analytics
-```
-
-### Components
-
-- **Intent Parser** — NL to structured intents with chain aliases
-- **MCP Client** — Session management, caching, retry, async support
-- **AI Agent** — Quote orchestration, history tracking, preferences
-- **Web UI** — FastAPI + vanilla JS, dark navy theme
-- **CLI** — Rich + prompt_toolkit, auto-completion
-
-## 🎨 Web UI
-
-The Web UI includes:
-
-- **Quote Result** — Real-time quotes with fee calculation
-- **Route Comparison** — Multi-chain comparison with best route highlighting
-- **Agent Reasoning** — Step-by-step MCP call visualization
-- **Solver Network** — Active solver cards with chain coverage
-- **Solver Analytics** — Stats cards + chain distribution chart
-- **Transaction Tracker** — Order status timeline with auto-refresh
-- **Quote Statistics** — Total quotes, average fee, top routes/tokens
-
-## 🔧 Technical Highlights
-
-### MCP Client
-- Exponential backoff retry (2s, 4s, 8s)
-- Rate limiting (min 1s between calls)
-- Connection pooling (lazy-init clients)
-- 5-minute response caching
-- Async support with `call_async()`
-
-### Agent
-- SQLite persistence for quote history
-- Chain alias resolution (arb, poly, op, avax)
-- Arrow syntax support (base->arb, eth→poly)
-- Multi-criteria route comparison
-- Preference memory (favorite routes)
-
-### CLI
-- Rich panels and tables
-- Color-coded chain names
-- Fee color coding (green <0.2%, yellow <0.5%, red ≥0.5%)
-- prompt_toolkit auto-completion
-- Progress spinners during API calls
-
-## 📦 SDK
-
-Install as a Python package:
-
+### 安装
 ```bash
 pip install lifi-agent
 ```
 
-Use in your code:
-
-```python
-from lifi_agent import LifAgent, parse_intent
-
-agent = LifAgent()
-agent.connect()
-
-intent = parse_intent("send 10 USDC base->arb")
-result = agent.get_quote(intent)
-print(result)
-```
-
-## 🛠️ Development
-
+### CLI 使用
 ```bash
-# Install dev dependencies
-pip install -e ".[dev]"
+python -m lifi_agent
 
-# Run tests
-pytest
-
-# Start dev server
-uvicorn lifi_agent.server:app --reload --port 8888
+> send 10 USDC from Base to Arbitrum
+> compare 50 USDC from Base to Polygon
+> route health base
+> stats
 ```
 
-## 📝 License
+### Web UI
+```bash
+python -m lifi_agent.server
+# 打开 http://localhost:8888
+```
+
+## 🏗️ 技术架构
+
+```
+User (自然语言)
+     ↓
+AI Agent (意图解析 + LLM)
+     ↓
+MCP Client (协议封装)
+     ↓
+LI.FI Intents MCP Server
+     ↓
+Solver Network (跨链执行)
+```
+
+## 📁 项目结构
+
+```
+lifi-intents-demo/
+├── lifi_agent/
+│   ├── __init__.py
+│   ├── __main__.py
+│   ├── agent.py          # AI Agent + 意图解析
+│   ├── mcp_client.py     # MCP 协议客户端
+│   └── server.py         # Web UI 后端
+├── demo_script.py        # Demo 演示脚本
+├── SUBMISSION.md         # 提交材料
+├── x_thread.md           # X Thread 文案
+└── README.md
+```
+
+## 🎯 为什么这个项目重要？
+
+1. **降低门槛** - 不需要懂链、代币、Gas，自然语言就能跨链
+2. **AI 原生** - 符合 AI Agent 时代趋势
+3. **MCP 标准** - 可以集成到任何 AI 助手（Claude、GPT、Hermes）
+4. **Solver 机会** - 展示了 Solver 生态的可能性
+
+## 📺 Demo
+
+- **Web UI**: http://143.198.95.119:8888
+- **Demo 视频**: output/demo_v2.mp4
+- **GitHub**: https://github.com/tiyadegure/lifi-intents-demo
+
+## 📝 提交材料
+
+- [x] 代码（GitHub）
+- [x] Demo 视频
+- [x] Web UI 演示
+- [x] X Thread 文案
+- [ ] 提交表单（5/26 开放）
+
+## 📄 License
 
 MIT
-
-## 🙏 Acknowledgments
-
-- [LI.FI](https://li.fi) for the Intents MCP Server
-- [Model Context Protocol](https://modelcontextprotocol.io) for the spec
-- [Rich](https://rich.readthedocs.io/) for terminal formatting
-- [FastAPI](https://fastapi.tiangolo.com/) for the web framework
-
----
-
-*Built for the LI.FI Intents Builder Challenge*

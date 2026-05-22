@@ -245,8 +245,8 @@ async def recent_orders():
 
 @app.get("/api/stats")
 async def get_stats():
-    from lifi_agent.agent import quote_store
-    return quote_store.get_stats()
+    from lifi_agent.agent import get_quote_store
+    return get_quote_store().get_stats()
 
 
 @app.get("/api/solver-inventory")
