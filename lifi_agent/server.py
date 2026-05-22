@@ -249,6 +249,29 @@ async def get_stats():
     return quote_store.get_stats()
 
 
+@app.get("/api/solver-inventory")
+async def solver_inventory(from_chain: str, to_chain: str, from_asset: str, to_asset: str):
+    await asyncio.to_thread(ensure_connected)
+    start = time.time()
+    result = await asyncio.to_thread(agent.get_quote_inventory, from_chain, to_chain, from_asset, to_asset)
+    duration = int((time.time() - start) * 1000)
+    trace_step("get-quote-inventory", {
+        "from_chain": from_chain, "to_chain": to_chain,
+        "from_asset": from_asset, "to_asset": to_asset,
+    }, result, duration)
+    return result
+
+
+@app.get("/api/route-health")
+async def route_health(from_chain: str, to_chain: str):
+    await asyncio.to_thread(ensure_connected)
+    start = time.time()
+    result = await asyncio.to_thread(agent.check_route_health, from_chain, to_chain)
+    duration = int((time.time() - start) * 1000)
+    trace_step("check-route-health", {"from_chain": from_chain, "to_chain": to_chain}, result, duration)
+    return result
+
+
 # ── Web UI ──────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
@@ -415,6 +438,61 @@ async def index():
     header h1{font-size:20px}
     header p{font-size:12px}
   }
+  /* Solver Tools */
+  .solver-tool-section{margin-bottom:0}
+  .solver-tool-title{font-size:15px;font-weight:600;color:var(--text-primary);margin-bottom:4px}
+  .solver-tool-desc{font-size:13px;color:var(--text-secondary);margin-bottom:14px}
+  .solver-tool-controls{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:14px}
+  .solver-tool-field{display:flex;flex-direction:column;gap:4px}
+  .solver-tool-field label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-weight:600}
+  .solver-tool-field select{background:var(--bg-base);border:1px solid var(--border);color:var(--text-primary);padding:8px 12px;border-radius:var(--radius-sm);font-size:13px;font-family:inherit;outline:none;cursor:pointer;min-width:140px;transition:border-color .2s}
+  .solver-tool-field select:focus{border-color:var(--accent)}
+  .solver-tool-divider{height:1px;background:var(--border-subtle);margin:20px 0}
+  .health-card{background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);padding:16px 18px;margin-top:10px;animation:fadeSlideIn .3s ease both}
+  .health-card.healthy{border-left:3px solid var(--green)}
+  .health-card.unhealthy{border-left:3px solid var(--red)}
+  .health-card.unknown{border-left:3px solid var(--amber)}
+  .health-status{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .health-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .health-dot.green{background:var(--green);box-shadow:0 0 6px var(--green-dim)}
+  .health-dot.red{background:var(--red);box-shadow:0 0 6px var(--red-dim)}
+  .health-dot.amber{background:var(--amber);box-shadow:0 0 6px var(--amber-dim)}
+  .health-label{font-size:14px;font-weight:600;color:var(--text-primary)}
+  .health-meta{font-size:13px;color:var(--text-secondary)}
+  .health-meta code{background:var(--bg-surface);padding:1px 6px;border-radius:4px;font-size:12px;color:var(--text-primary)}
+  .inventory-card{background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);padding:14px 16px;margin-top:10px;animation:fadeSlideIn .3s ease both}
+  .inventory-card:hover{border-color:#2a3f6a;background:var(--bg-card-hover)}
+  .inventory-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border-subtle);font-size:13px}
+  .inventory-row:last-child{border-bottom:none}
+  .inventory-key{color:var(--text-muted);font-weight:500}
+  .inventory-val{color:var(--text-primary);font-weight:600;font-variant-numeric:tabular-nums}
+  /* Become a Solver */
+  .solver-guide-intro{color:var(--text-secondary);font-size:14px;line-height:1.6;margin-bottom:20px}
+  .solver-steps{display:flex;flex-direction:column;gap:16px;margin-bottom:24px}
+  .solver-step{display:flex;gap:14px;background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);padding:18px 20px;transition:border-color .2s,background .2s}
+  .solver-step:hover{border-color:#2a3f6a;background:var(--bg-card-hover)}
+  .solver-step-num{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#6c5ce7,#5a4bd1);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0}
+  .solver-step-body{flex:1}
+  .solver-step-title{font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:4px}
+  .solver-step-desc{font-size:13px;color:var(--text-secondary);line-height:1.5}
+  .solver-code-block{margin-top:12px;background:var(--bg-base);border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden}
+  .solver-code-header{display:flex;justify-content:space-between;align-items:center;padding:8px 14px;background:var(--bg-surface);border-bottom:1px solid var(--border-subtle);font-size:12px;color:var(--text-muted);font-weight:600}
+  .solver-code-lang{background:var(--accent-glow);color:var(--accent);padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600}
+  .solver-code{padding:14px 16px;margin:0;font-size:12px;line-height:1.6;overflow-x:auto;color:var(--text-secondary);font-family:'SF Mono',SFMono-Regular,Consolas,monospace}
+  .solver-code code{color:inherit}
+  .solver-links{margin-top:4px}
+  .solver-links-title{font-size:13px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:12px}
+  .solver-link-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .solver-link-card{display:flex;flex-direction:column;gap:4px;background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);padding:14px 16px;text-decoration:none;transition:border-color .2s,background .2s}
+  .solver-link-card:hover{border-color:var(--accent);background:var(--bg-card-hover)}
+  .solver-link-icon{font-size:18px}
+  .solver-link-label{font-size:13px;font-weight:600;color:var(--text-primary)}
+  .solver-link-desc{font-size:12px;color:var(--text-muted);line-height:1.4}
+  @media(max-width:768px){
+    .solver-tool-controls{flex-direction:column;align-items:stretch}
+    .solver-tool-field select{min-width:auto}
+    .solver-link-grid{grid-template-columns:1fr}
+  }
 </style>
 </head>
 <body>
@@ -556,6 +634,197 @@ async def index():
         <span class="analytics-icon">🪙</span>
         <div class="analytics-value" id="statTopToken">—</div>
         <div class="analytics-label">Top Token</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Solver Tools -->
+  <div class="panel" style="margin-top:20px">
+    <h3>🛠️ Solver Tools <span class="badge">MCP</span></h3>
+
+    <!-- Route Health Checker -->
+    <div class="solver-tool-section">
+      <div class="solver-tool-title">Route Health Checker</div>
+      <div class="solver-tool-desc">Check if a route between two chains is healthy and available.</div>
+      <div class="solver-tool-controls">
+        <div class="solver-tool-field">
+          <label>From Chain</label>
+          <select id="healthFromChain">
+            <option value="1">Ethereum</option>
+            <option value="8453">Base</option>
+            <option value="42161">Arbitrum</option>
+            <option value="10">Optimism</option>
+            <option value="137">Polygon</option>
+            <option value="56">BSC</option>
+            <option value="43114">Avalanche</option>
+            <option value="324">zkSync</option>
+            <option value="59144">Linea</option>
+            <option value="534352">Scroll</option>
+            <option value="81457">Blast</option>
+            <option value="5000">Mantle</option>
+            <option value="146">Sonic</option>
+          </select>
+        </div>
+        <div class="solver-tool-field">
+          <label>To Chain</label>
+          <select id="healthToChain">
+            <option value="42161">Arbitrum</option>
+            <option value="1">Ethereum</option>
+            <option value="8453">Base</option>
+            <option value="10">Optimism</option>
+            <option value="137">Polygon</option>
+            <option value="56">BSC</option>
+            <option value="43114">Avalanche</option>
+            <option value="324">zkSync</option>
+            <option value="59144">Linea</option>
+            <option value="534352">Scroll</option>
+            <option value="81457">Blast</option>
+            <option value="5000">Mantle</option>
+            <option value="146">Sonic</option>
+          </select>
+        </div>
+        <button class="btn" onclick="checkRouteHealth()">Check Health</button>
+      </div>
+      <div id="healthResult"></div>
+    </div>
+
+    <div class="solver-tool-divider"></div>
+
+    <!-- Quote Inventory Viewer -->
+    <div class="solver-tool-section">
+      <div class="solver-tool-title">Quote Inventory Viewer</div>
+      <div class="solver-tool-desc">View standing quotes from solvers for a specific route and token pair.</div>
+      <div class="solver-tool-controls">
+        <div class="solver-tool-field">
+          <label>From Chain</label>
+          <select id="invFromChain">
+            <option value="1">Ethereum</option>
+            <option value="8453">Base</option>
+            <option value="42161">Arbitrum</option>
+            <option value="10">Optimism</option>
+            <option value="137">Polygon</option>
+            <option value="56">BSC</option>
+            <option value="43114">Avalanche</option>
+          </select>
+        </div>
+        <div class="solver-tool-field">
+          <label>To Chain</label>
+          <select id="invToChain">
+            <option value="42161">Arbitrum</option>
+            <option value="1">Ethereum</option>
+            <option value="8453">Base</option>
+            <option value="10">Optimism</option>
+            <option value="137">Polygon</option>
+            <option value="56">BSC</option>
+            <option value="43114">Avalanche</option>
+          </select>
+        </div>
+        <div class="solver-tool-field">
+          <label>From Token</label>
+          <select id="invFromToken">
+            <option value="0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48">USDC (ETH)</option>
+            <option value="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913">USDC (Base)</option>
+            <option value="0xaf88d065e77c8cC2239327C5EDb3A432268e5831">USDC (Arb)</option>
+            <option value="0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85">USDC (OP)</option>
+            <option value="0xdAC17F958D2ee523a2206206994597C13D831ec7">USDT (ETH)</option>
+            <option value="0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2">WETH (ETH)</option>
+          </select>
+        </div>
+        <div class="solver-tool-field">
+          <label>To Token</label>
+          <select id="invToToken">
+            <option value="0xaf88d065e77c8cC2239327C5EDb3A432268e5831">USDC (Arb)</option>
+            <option value="0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48">USDC (ETH)</option>
+            <option value="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913">USDC (Base)</option>
+            <option value="0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85">USDC (OP)</option>
+            <option value="0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9">USDT (Arb)</option>
+            <option value="0x82aF49447D8a07e3bd95BD0d56f35241523fBab1">WETH (Arb)</option>
+          </select>
+        </div>
+        <button class="btn" onclick="viewInventory()">View Inventory</button>
+      </div>
+      <div id="inventoryResult"></div>
+    </div>
+  </div>
+
+  <!-- Become a Solver -->
+  <div class="panel" style="margin-top:20px">
+    <h3>🚀 Become a Solver</h3>
+    <div class="solver-guide">
+      <p class="solver-guide-intro">Solvers compete to fill cross-chain intents, earning fees on every transfer. Join the LI.FI solver network to provide liquidity and earn yield across chains.</p>
+
+      <div class="solver-steps">
+        <div class="solver-step">
+          <div class="solver-step-num">1</div>
+          <div class="solver-step-body">
+            <div class="solver-step-title">Set Up Your Solver Infrastructure</div>
+            <div class="solver-step-desc">Deploy solver nodes on the chains you want to support. You need liquidity pools and a relayer to fulfill intents. Minimum requirements: EVM-compatible node, funded wallet, and a reliable RPC endpoint per chain.</div>
+          </div>
+        </div>
+        <div class="solver-step">
+          <div class="solver-step-num">2</div>
+          <div class="solver-step-body">
+            <div class="solver-step-title">Register as a Solver</div>
+            <div class="solver-step-desc">Submit your solver identity to the LI.FI Intents network. This includes your wallet address, supported chains, and the tokens you can provide quotes for.</div>
+            <div class="solver-code-block">
+              <div class="solver-code-header">Register via MCP <span class="solver-code-lang">TypeScript</span></div>
+              <pre class="solver-code"><code>// Submit solver identity via LI.FI Intents API
+const registration = await mcp.call("submit-standing-quotes", {
+  quotes: [
+    {
+      fromChain: "1",         // Ethereum
+      toChain: "42161",       // Arbitrum
+      fromAsset: "0xA0b8...", // USDC on Ethereum
+      toAsset: "0xaf88...",   // USDC on Arbitrum
+      margin: "0.001",        // 0.1% fee
+      minAmount: "1000000",   // 1 USDC (6 decimals)
+      maxAmount: "10000000000" // 10,000 USDC
+    }
+  ]
+});</code></pre>
+            </div>
+          </div>
+        </div>
+        <div class="solver-step">
+          <div class="solver-step-num">3</div>
+          <div class="solver-step-body">
+            <div class="solver-step-title">Monitor and Optimize</div>
+            <div class="solver-step-desc">Use the Route Health Checker and Quote Inventory tools above to monitor solver performance. Adjust margins based on competition and gas costs. Track your orders with the Transaction Tracker.</div>
+          </div>
+        </div>
+        <div class="solver-step">
+          <div class="solver-step-num">4</div>
+          <div class="solver-step-body">
+            <div class="solver-step-title">Scale Across Chains</div>
+            <div class="solver-step-desc">Expand your solver to additional chains and token pairs. Solvers covering more routes earn more volume. Use the Solver Analytics above to identify high-demand, low-coverage routes.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="solver-links">
+        <div class="solver-links-title">Resources</div>
+        <div class="solver-link-grid">
+          <a href="https://docs.li.fi/lifi-intents/solvers/overview" class="solver-link-card" target="_blank" rel="noopener">
+            <span class="solver-link-icon">📖</span>
+            <span class="solver-link-label">Solver Overview</span>
+            <span class="solver-link-desc">Introduction to the LI.FI solver network</span>
+          </a>
+          <a href="https://docs.li.fi/lifi-intents/solvers/getting-started" class="solver-link-card" target="_blank" rel="noopener">
+            <span class="solver-link-icon">⚡</span>
+            <span class="solver-link-label">Getting Started</span>
+            <span class="solver-link-desc">Step-by-step solver setup guide</span>
+          </a>
+          <a href="https://docs.li.fi/lifi-intents/api-reference" class="solver-link-card" target="_blank" rel="noopener">
+            <span class="solver-link-icon">🔌</span>
+            <span class="solver-link-label">API Reference</span>
+            <span class="solver-link-desc">Full API docs for solver operations</span>
+          </a>
+          <a href="https://github.com/tiyadegure/lifi-intents-demo" class="solver-link-card" target="_blank" rel="noopener">
+            <span class="solver-link-icon">💻</span>
+            <span class="solver-link-label">Demo Source</span>
+            <span class="solver-link-desc">Reference implementation on GitHub</span>
+          </a>
+        </div>
       </div>
     </div>
   </div>
@@ -954,6 +1223,76 @@ async function loadStats() {
 }
 
 loadStats();
+
+// Solver Tools: Route Health Checker
+async function checkRouteHealth() {
+  const fromChain = document.getElementById('healthFromChain').value;
+  const toChain = document.getElementById('healthToChain').value;
+  const el = document.getElementById('healthResult');
+  el.innerHTML = '<div class="skeleton w60"></div>';
+  try {
+    const res = await fetch('/api/route-health?from_chain=' + fromChain + '&to_chain=' + toChain);
+    const data = await res.json();
+    const healthy = data?.data?.healthy;
+    const status = healthy === true ? 'healthy' : healthy === false ? 'unhealthy' : 'unknown';
+    const dotColor = status === 'healthy' ? 'green' : status === 'unhealthy' ? 'red' : 'amber';
+    const label = status === 'healthy' ? 'Route Healthy' : status === 'unhealthy' ? 'Route Unhealthy' : 'Status Unknown';
+    const fromLabel = document.getElementById('healthFromChain').selectedOptions[0].text;
+    const toLabel = document.getElementById('healthToChain').selectedOptions[0].text;
+    let meta = '';
+    if (data?.data?.latencyMs != null) meta += '<div class="health-meta">Latency: <code>' + escapeHtml(data.data.latencyMs) + 'ms</code></div>';
+    if (data?.data?.activeSolvers != null) meta += '<div class="health-meta">Active Solvers: <code>' + escapeHtml(data.data.activeSolvers) + '</code></div>';
+    if (data?.data?.lastChecked) meta += '<div class="health-meta">Last Checked: <code>' + escapeHtml(new Date(data.data.lastChecked).toLocaleString()) + '</code></div>';
+    if (data?.error) meta += '<div class="health-meta" style="color:var(--red)">Error: ' + escapeHtml(data.error) + '</div>';
+    el.innerHTML = '<div class="health-card ' + status + '">' +
+      '<div class="health-status">' +
+        '<span class="health-dot ' + dotColor + '"></span>' +
+        '<span class="health-label">' + escapeHtml(label) + '</span>' +
+      '</div>' +
+      '<div class="health-meta">' + escapeHtml(fromLabel) + ' → ' + escapeHtml(toLabel) + '</div>' +
+      meta +
+    '</div>';
+  } catch (e) {
+    el.innerHTML = '<div class="health-card unhealthy"><div class="health-status"><span class="health-dot red"></span><span class="health-label">Request Failed</span></div><div class="health-meta">' + escapeHtml(e.message) + '</div></div>';
+  }
+}
+
+// Solver Tools: Quote Inventory Viewer
+async function viewInventory() {
+  const fromChain = document.getElementById('invFromChain').value;
+  const toChain = document.getElementById('invToChain').value;
+  const fromAsset = document.getElementById('invFromToken').value;
+  const toAsset = document.getElementById('invToToken').value;
+  const el = document.getElementById('inventoryResult');
+  el.innerHTML = '<div class="skeleton w60"></div><div class="skeleton w80"></div>';
+  try {
+    const res = await fetch('/api/solver-inventory?from_chain=' + fromChain + '&to_chain=' + toChain + '&from_asset=' + encodeURIComponent(fromAsset) + '&to_asset=' + encodeURIComponent(toAsset));
+    const data = await res.json();
+    const quotes = data?.data?.quotes || data?.data?.inventory || [];
+    if (!quotes.length) {
+      const err = data?.error || data?.message || 'No standing quotes found for this route.';
+      el.innerHTML = '<div class="inventory-card"><div class="inventory-row"><span class="inventory-key">Result</span><span class="inventory-val" style="color:var(--text-muted)">' + escapeHtml(err) + '</span></div></div>';
+      return;
+    }
+    let html = '';
+    quotes.slice(0, 10).forEach(function(q, i) {
+      const fromLabel = document.getElementById('invFromChain').selectedOptions[0].text;
+      const toLabel = document.getElementById('invToChain').selectedOptions[0].text;
+      html += '<div class="inventory-card" style="animation-delay:' + (i * 0.06).toFixed(2) + 's">';
+      html += '<div class="inventory-row"><span class="inventory-key">Route</span><span class="inventory-val">' + escapeHtml(fromLabel) + ' → ' + escapeHtml(toLabel) + '</span></div>';
+      if (q.solver || q.solverName) html += '<div class="inventory-row"><span class="inventory-key">Solver</span><span class="inventory-val">' + escapeHtml(q.solver || q.solverName) + '</span></div>';
+      if (q.inputAmount) html += '<div class="inventory-row"><span class="inventory-key">Input</span><span class="inventory-val">' + escapeHtml(q.inputAmount) + '</span></div>';
+      if (q.outputAmount) html += '<div class="inventory-row"><span class="inventory-key">Output</span><span class="inventory-val">' + escapeHtml(q.outputAmount) + '</span></div>';
+      if (q.margin || q.fee) html += '<div class="inventory-row"><span class="inventory-key">Margin</span><span class="inventory-val">' + escapeHtml(q.margin || q.fee) + '</span></div>';
+      if (q.minAmount) html += '<div class="inventory-row"><span class="inventory-key">Min Amount</span><span class="inventory-val">' + escapeHtml(q.minAmount) + '</span></div>';
+      if (q.maxAmount) html += '<div class="inventory-row"><span class="inventory-key">Max Amount</span><span class="inventory-val">' + escapeHtml(q.maxAmount) + '</span></div>';
+      html += '</div>';
+    });
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<div class="inventory-card"><div class="inventory-row"><span class="inventory-key">Error</span><span class="inventory-val" style="color:var(--red)">' + escapeHtml(e.message) + '</span></div></div>';
+  }
+}
 </script>
 </body>
 </html>"""
