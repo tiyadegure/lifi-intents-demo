@@ -395,10 +395,10 @@ def parse_policy(text: str) -> Policy:
     if slippage_match:
         policy.max_slippage = float(slippage_match.group(1))
     
-    # Extract avoid chains: "avoid Ethereum", "avoid eth and polygon"
-    avoid_match = re.search(r'avoid\s+([\w\s,]+?)(?:\s+and\s+|\s*,\s*|\s*$)', text_lower)
+    # Extract avoid chains: "avoid Ethereum", "avoid eth and polygon", "avoid Base min output 9.5"
+    avoid_match = re.search(r'avoid\s+((?:\w+(?:\s+(?:and|,)\s+)?)+)', text_lower)
     if avoid_match:
-        chains_str = avoid_match.group(1)
+        chains_str = avoid_match.group(1).strip()
         # Split by "and" or comma
         chains = re.split(r'\s+and\s+|\s*,\s*', chains_str)
         for chain in chains:
@@ -1378,7 +1378,7 @@ class LifAgent:
         1. Route Health
         2. Quote Availability
         3. Solver Inventory
-        4. Order Debugging (if order_id provided)
+        Each check includes: what happened, why it matters, what to do next.
         """
         report = {
             "route": f"{from_chain} → {to_chain}",
@@ -1391,19 +1391,43 @@ class LifAgent:
             health_result = self.check_route_health(from_chain, to_chain, from_asset, to_asset)
             health_data = health_result.get("data", {})
             status = health_data.get("status", "unknown")
+            is_healthy = status.lower() in ["healthy", "ok", "good"]
+            
+            if is_healthy:
+                explanation = (
+                    f"Route is healthy. MCP responded with status '{status}'. "
+                    f"Solvers are actively serving this route."
+                )
+                action = "No action needed. You can safely proceed with quotes on this route."
+            elif status == "unknown":
+                explanation = (
+                    f"MCP responded, but no explicit health status was returned. "
+                    f"This may mean the endpoint doesn't expose health data, or the route is new."
+                )
+                action = "Try requesting a quote directly. If it succeeds, the route is functional."
+            else:
+                explanation = (
+                    f"Route health check returned '{status}'. "
+                    f"This may indicate solver downtime or liquidity issues on this route."
+                )
+                action = "Check solver inventory for active quotes. Consider alternative routes if no quotes are available."
             
             report["checks"].append({
                 "name": "Route Health",
                 "status": status,
                 "details": health_data,
-                "passed": status.lower() in ["healthy", "ok", "good"]
+                "passed": is_healthy,
+                "explanation": explanation,
+                "action": action
             })
         except Exception as e:
             report["checks"].append({
                 "name": "Route Health",
                 "status": "error",
                 "details": str(e),
-                "passed": False
+                "passed": False,
+                "explanation": f"Failed to check route health: {e}. The MCP endpoint may be unreachable.",
+                "action": "Run 'doctor' to diagnose MCP connectivity issues."
             })
         
         # ── Check 2: Quote Availability ───────────────────────────
@@ -1422,6 +1446,19 @@ class LifAgent:
             
             quote_available = len(matching_routes) > 0
             
+            if quote_available:
+                explanation = (
+                    f"Found {len(matching_routes)} supported route(s) for {from_chain} → {to_chain}. "
+                    f"This route appears in LI.FI's supported routes list."
+                )
+                action = "Route is supported. You can request quotes via 'request-quote'."
+            else:
+                explanation = (
+                    f"No supported routes found for {from_chain} → {to_chain}. "
+                    f"This may mean the chain pair is not yet supported, or token addresses don't match."
+                )
+                action = "Check 'get-supported-routes' for available chain pairs. Try different token addresses."
+            
             report["checks"].append({
                 "name": "Quote Availability",
                 "status": "available" if quote_available else "unavailable",
@@ -1429,14 +1466,18 @@ class LifAgent:
                     "matching_routes": len(matching_routes),
                     "routes": matching_routes[:3]  # Show first 3
                 },
-                "passed": quote_available
+                "passed": quote_available,
+                "explanation": explanation,
+                "action": action
             })
         except Exception as e:
             report["checks"].append({
                 "name": "Quote Availability",
                 "status": "error",
                 "details": str(e),
-                "passed": False
+                "passed": False,
+                "explanation": f"Failed to check quote availability: {e}.",
+                "action": "Run 'doctor' to diagnose MCP connectivity."
             })
         
         # ── Check 3: Solver Inventory ─────────────────────────────
@@ -1446,6 +1487,19 @@ class LifAgent:
                 inventory_data = inventory_result.get("data", {})
                 quotes = inventory_data.get("quotes", [])
                 
+                if quotes:
+                    explanation = (
+                        f"Found {len(quotes)} standing quote(s) in solver inventory. "
+                        f"Solvers have pre-committed liquidity for this asset pair."
+                    )
+                    action = "Quotes are available. Execute quickly — standing quotes may expire."
+                else:
+                    explanation = (
+                        f"No standing quotes found for this asset pair. "
+                        f"This doesn't mean quotes won't work — solvers may still respond to on-demand requests."
+                    )
+                    action = "Try 'request-quote' anyway. If it fails, the solver may need time to provision liquidity."
+                
                 report["checks"].append({
                     "name": "Solver Inventory",
                     "status": "active" if quotes else "empty",
@@ -1453,21 +1507,27 @@ class LifAgent:
                         "quote_count": len(quotes),
                         "quotes": quotes[:3]  # Show first 3
                     },
-                    "passed": len(quotes) > 0
+                    "passed": len(quotes) > 0,
+                    "explanation": explanation,
+                    "action": action
                 })
             else:
                 report["checks"].append({
                     "name": "Solver Inventory",
                     "status": "skipped",
                     "details": "No asset pair specified",
-                    "passed": True
+                    "passed": True,
+                    "explanation": "Asset pair not specified — cannot check solver inventory.",
+                    "action": "Provide from_asset and to_asset parameters to check inventory."
                 })
         except Exception as e:
             report["checks"].append({
                 "name": "Solver Inventory",
                 "status": "error",
                 "details": str(e),
-                "passed": False
+                "passed": False,
+                "explanation": f"Failed to check solver inventory: {e}.",
+                "action": "Run 'doctor' to diagnose MCP connectivity."
             })
         
         # ── Summary ───────────────────────────────────────────────
@@ -1483,6 +1543,88 @@ class LifAgent:
         }
         
         return report
+
+    def explain(self, text: str) -> dict:
+        """Explain what the agent will do for a natural language intent, without executing.
+        
+        Returns a structured explanation with:
+        - Parsed intent (what the user wants)
+        - Parsed policy (constraints)
+        - Step-by-step plan (what the agent will do)
+        """
+        intent, policy = parse_intent_with_policy(text)
+        
+        # Build intent description
+        intent_desc = f"Move {intent.amount} {intent.token.upper()} from {intent.from_chain.title()} to {intent.to_chain.title()}."
+        
+        # Build policy description
+        policy_parts = []
+        if policy.max_fee_pct is not None:
+            policy_parts.append(f"Only continue if estimated fee is below {policy.max_fee_pct}%.")
+        if policy.min_output_amount is not None:
+            policy_parts.append(f"Only continue if output is at least {policy.min_output_amount} {intent.token.upper()}.")
+        if policy.require_healthy_route:
+            policy_parts.append("Only continue if route health check passes.")
+        if policy.avoid_chains:
+            chains = [c.title() for c in policy.avoid_chains]
+            policy_parts.append(f"Avoid using chains: {', '.join(chains)}.")
+        if not policy.allow_cross_chain:
+            policy_parts.append("Only allow same-chain transfers.")
+        if policy.prefer_cheapest:
+            policy_parts.append("Prefer the cheapest available route.")
+        
+        policy_desc = " ".join(policy_parts) if policy_parts else "No policy constraints — proceed unconditionally."
+        
+        # Build execution plan
+        steps = [
+            f"1. Parse intent → extract amount ({intent.amount}), token ({intent.token.upper()}), "
+            f"source ({intent.from_chain.title()}), destination ({intent.to_chain.title()})",
+            f"2. Resolve chain IDs → {intent.from_chain}: {intent.from_chain_id()}, {intent.to_chain}: {intent.to_chain_id()}",
+            f"3. Resolve token addresses → source: {intent.from_token_address()}, dest: {intent.to_token_address()}",
+            "4. Call 'get-supported-routes' → verify this chain pair is supported",
+        ]
+        
+        if policy.require_healthy_route:
+            steps.append("5. Call 'check-route-health' → verify solvers are serving this route")
+        
+        steps.append(f"{'6' if policy.require_healthy_route else '5'}. Call 'request-quote' → get solver quote for this transfer")
+        steps.append(f"{'7' if policy.require_healthy_route else '6'}. Calculate fee percentage from input/output amounts")
+        
+        step_num = 8 if policy.require_healthy_route else 7
+        
+        if policy.max_fee_pct is not None:
+            steps.append(f"{step_num}. Check fee policy → compare calculated fee against {policy.max_fee_pct}% limit")
+            step_num += 1
+        if policy.min_output_amount is not None:
+            steps.append(f"{step_num}. Check output policy → compare output amount against {policy.min_output_amount} minimum")
+            step_num += 1
+        if policy.avoid_chains:
+            chains = [c.title() for c in policy.avoid_chains]
+            steps.append(f"{step_num}. Check avoid chains → verify neither source nor destination is in: {', '.join(chains)}")
+            step_num += 1
+        
+        steps.append(f"{step_num}. Return verdict → EXECUTABLE (all checks pass) or REFUSED (any check fails)")
+        
+        return {
+            "input": text,
+            "intent": {
+                "amount": intent.amount,
+                "token": intent.token.upper(),
+                "from_chain": intent.from_chain,
+                "to_chain": intent.to_chain,
+                "description": intent_desc
+            },
+            "policy": {
+                "max_fee_pct": policy.max_fee_pct,
+                "min_output_amount": policy.min_output_amount,
+                "require_healthy_route": policy.require_healthy_route,
+                "avoid_chains": policy.avoid_chains,
+                "allow_cross_chain": policy.allow_cross_chain,
+                "prefer_cheapest": policy.prefer_cheapest,
+                "description": policy_desc
+            },
+            "execution_plan": steps
+        }
 
     def doctor(self) -> dict:
         """Run diagnostic checks on the MCP connection and configuration.
@@ -1672,6 +1814,7 @@ def interactive():
     help_table.add_column("Description")
     help_table.add_row("[cyan]send[/cyan] 10 USDC from Base to Arbitrum", "Execute a transfer")
     help_table.add_row("[cyan]safe[/cyan] send 10 USDC from Base to Arbitrum if fee < 0.5%", "Safe Verdict: check policy before executing")
+    help_table.add_row("[cyan]explain[/cyan] send 10 USDC from Base to Arbitrum if fee < 0.5%", "Explain intent and execution plan without executing")
     help_table.add_row("[cyan]compare[/cyan] 10 USDC from Ethereum", "Compare quotes across chains")
     help_table.add_row("[cyan]route health[/cyan] base arbitrum", "Check route health status")
     help_table.add_row("[cyan]solver[/cyan] base arbitrum USDC USDC", "Run solver-aware checks (health, quotes, inventory)")
@@ -1690,7 +1833,7 @@ def interactive():
     # ── Auto-completion setup ─────────────────────────────────────
     chain_names = list(CHAINS.keys())
     token_names = ["USDC", "USDT", "ETH"]
-    commands = ["send", "safe", "verdict", "compare", "route", "solver", "doctor", "routes", "orders", "favorites", "wallet",
+    commands = ["send", "safe", "verdict", "explain", "compare", "route", "solver", "doctor", "routes", "orders", "favorites", "wallet",
                 "history", "stats", "quit"]
     all_completions = commands + chain_names + token_names + [
         "from", "to", "bridge", "transfer", "if", "fee", "healthy",
@@ -2039,6 +2182,41 @@ def interactive():
             except ValueError as e:
                 console.print(f"\n  [red]Parse error:[/red] {e}")
                 console.print("  [dim]Example: safe send 10 USDC from Base to Arbitrum if fee < 0.5%[/dim]\n")
+            except Exception as e:
+                console.print(f"\n  [red]Error:[/red] {e}\n")
+            continue
+
+        # ── Explain command ──────────────────────────────────────
+        if text.startswith("explain "):
+            cmd_text = text[8:].strip()
+            if not cmd_text:
+                console.print("\n  [yellow]Usage:[/yellow] explain <intent>")
+                console.print("  [dim]Example:[/dim] explain safe send 10 USDC from Base to Arbitrum if fee < 0.5%\n")
+                continue
+            
+            try:
+                result = agent.explain(cmd_text)
+                
+                console.print(f"\n  [bold cyan]📖 Intent Explanation[/bold cyan]\n")
+                
+                # Intent
+                console.print(f"  [bold]Intent:[/bold]")
+                console.print(f"    {result['intent']['description']}\n")
+                
+                # Policy
+                console.print(f"  [bold]Policy:[/bold]")
+                console.print(f"    {result['policy']['description']}\n")
+                
+                # Execution plan
+                console.print(f"  [bold]Execution Plan:[/bold]")
+                for step in result['execution_plan']:
+                    console.print(f"    {step}")
+                
+                console.print()
+                
+            except ValueError as e:
+                console.print(f"\n  [red]Parse error:[/red] {e}")
+                console.print("  [dim]Example: explain send 10 USDC from Base to Arbitrum if fee < 0.5%[/dim]\n")
             except Exception as e:
                 console.print(f"\n  [red]Error:[/red] {e}\n")
             continue

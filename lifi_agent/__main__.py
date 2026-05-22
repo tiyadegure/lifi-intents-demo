@@ -9,6 +9,9 @@ if __name__ == "__main__":
         if text == "doctor":
             report = agent.doctor()
             print(json.dumps(report, indent=2))
+        elif text.startswith("explain "):
+            result = agent.explain(text[8:])
+            print(json.dumps(result, indent=2))
         elif text.startswith("safe "):
             from .agent import parse_intent_with_policy
             agent.connect()

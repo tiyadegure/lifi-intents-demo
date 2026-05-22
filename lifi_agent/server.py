@@ -275,6 +275,21 @@ async def route_health(from_chain: str, to_chain: str):
     return result
 
 
+@app.post("/api/explain")
+async def explain_intent(request: Request):
+    """Explain intent without executing — shows parsed intent, policy, and execution plan."""
+    body = await request.json()
+    text = body.get("text", "").strip()
+    if not text:
+        return JSONResponse({"error": "No intent text provided"}, status_code=400)
+    
+    try:
+        result = agent.explain(text)
+        return result
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
 @app.post("/api/analyze-intent")
 async def analyze_intent(request: Request):
     """Full Safe Verdict analysis: parse intent → policy → MCP calls → decision trace."""
