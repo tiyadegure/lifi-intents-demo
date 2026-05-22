@@ -301,6 +301,36 @@ class Verdict:
         return f"Verdict({'EXECUTABLE' if self.executable else 'REFUSED'})"
 
 
+@dataclass
+class DecisionStep:
+    """A single step in the decision trace."""
+    name: str           # step name (e.g., "Route Supported", "Fee Policy")
+    status: str         # "passed", "failed", "warning", "skipped"
+    detail: str         # human-readable detail
+    duration_ms: int = 0  # time taken in milliseconds
+    mcp_tool: str = ""  # MCP tool called (if any)
+    mcp_args: Dict[str, Any] = field(default_factory=dict)  # MCP arguments
+    mcp_result: Optional[Dict] = None  # raw MCP result
+    
+    def __repr__(self):
+        return f"DecisionStep({self.name}: {self.status})"
+
+
+@dataclass
+class DecisionResult:
+    """Complete decision trace with all steps."""
+    verdict: str                    # "EXECUTABLE" or "REFUSED"
+    reason: str                     # human-readable reason
+    steps: List[DecisionStep]       # ordered list of decision steps
+    intent: Optional[Intent] = None # parsed intent
+    policy: Optional[Policy] = None # parsed policy
+    quote_data: Optional[Dict] = None  # raw quote data
+    total_duration_ms: int = 0      # total time taken
+    
+    def __repr__(self):
+        return f"DecisionResult({self.verdict}, {len(self.steps)} steps)"
+
+
 def parse_policy(text: str) -> Policy:
     """Extract safety policy from natural language.
     
@@ -869,6 +899,342 @@ class LifAgent:
                 quote_data=quote_data
             )
 
+    def safe_verdict_trace(self, intent: Intent, policy: Policy) -> DecisionResult:
+        """Execute Safe Verdict with full decision trace.
+        
+        Returns a DecisionResult with detailed step-by-step trace.
+        """
+        start_time = time.time()
+        steps = []
+        quote_data = None
+        
+        # ── Step 1: Parse Intent ──────────────────────────────────
+        step_start = time.time()
+        steps.append(DecisionStep(
+            name="Parse Intent",
+            status="passed",
+            detail=f"{intent.amount} {intent.token.upper()} {intent.from_chain} → {intent.to_chain}",
+            duration_ms=int((time.time() - step_start) * 1000)
+        ))
+        
+        # ── Step 2: Parse Policy ──────────────────────────────────
+        step_start = time.time()
+        steps.append(DecisionStep(
+            name="Parse Policy",
+            status="passed",
+            detail=str(policy),
+            duration_ms=int((time.time() - step_start) * 1000)
+        ))
+        
+        # ── Step 3: Check Supported Route ─────────────────────────
+        step_start = time.time()
+        try:
+            routes_result = self.get_routes()
+            route_list = routes_result.get("data", {}).get("routes", [])
+            from_id = int(intent.from_chain_id())
+            to_id = int(intent.to_chain_id())
+            
+            if route_list:
+                matching = [r for r in route_list
+                            if r.get("fromChainId") == from_id and r.get("toChainId") == to_id
+                            and r.get("fromToken", {}).get("address", "").lower() == intent.from_token_address().lower()]
+                route_supported = len(matching) > 0
+            else:
+                route_supported = True
+            
+            duration = int((time.time() - step_start) * 1000)
+            steps.append(DecisionStep(
+                name="Check Supported Route",
+                status="passed" if route_supported else "failed",
+                detail=f"{intent.from_chain} → {intent.to_chain} ({intent.token.upper()})",
+                duration_ms=duration,
+                mcp_tool="get-supported-routes",
+                mcp_result=routes_result
+            ))
+            
+            if not route_supported:
+                return DecisionResult(
+                    verdict="REFUSED",
+                    reason=f"No supported route found for {intent.from_chain} → {intent.to_chain} ({intent.token.upper()}).",
+                    steps=steps,
+                    intent=intent,
+                    policy=policy,
+                    total_duration_ms=int((time.time() - start_time) * 1000)
+                )
+        except Exception as e:
+            duration = int((time.time() - step_start) * 1000)
+            steps.append(DecisionStep(
+                name="Check Supported Route",
+                status="failed",
+                detail=f"Error: {e}",
+                duration_ms=duration,
+                mcp_tool="get-supported-routes"
+            ))
+            return DecisionResult(
+                verdict="REFUSED",
+                reason=f"Failed to check route: {e}",
+                steps=steps,
+                intent=intent,
+                policy=policy,
+                total_duration_ms=int((time.time() - start_time) * 1000)
+            )
+        
+        # ── Step 4: Check Route Health (if required) ──────────────
+        step_start = time.time()
+        if policy.require_healthy_route:
+            try:
+                health_result = self.check_route_health(intent.from_chain, intent.to_chain)
+                health_data = health_result.get("data", {})
+                status = health_data.get("status", "unknown")
+                is_healthy = status.lower() in ["healthy", "ok", "good"]
+                
+                duration = int((time.time() - step_start) * 1000)
+                steps.append(DecisionStep(
+                    name="Check Route Health",
+                    status="passed" if is_healthy else "failed",
+                    detail=f"Status: {status.upper()}",
+                    duration_ms=duration,
+                    mcp_tool="check-route-health",
+                    mcp_args={"fromChain": intent.from_chain, "toChain": intent.to_chain},
+                    mcp_result=health_result
+                ))
+                
+                if not is_healthy:
+                    return DecisionResult(
+                        verdict="REFUSED",
+                        reason=f"Route health check failed. Status: {status}. The agent refuses to prepare the order.",
+                        steps=steps,
+                        intent=intent,
+                        policy=policy,
+                        total_duration_ms=int((time.time() - start_time) * 1000)
+                    )
+            except Exception as e:
+                duration = int((time.time() - step_start) * 1000)
+                steps.append(DecisionStep(
+                    name="Check Route Health",
+                    status="failed",
+                    detail=f"Error: {e}",
+                    duration_ms=duration,
+                    mcp_tool="check-route-health"
+                ))
+                return DecisionResult(
+                    verdict="REFUSED",
+                    reason=f"Failed to check route health: {e}",
+                    steps=steps,
+                    intent=intent,
+                    policy=policy,
+                    total_duration_ms=int((time.time() - start_time) * 1000)
+                )
+        else:
+            duration = int((time.time() - step_start) * 1000)
+            steps.append(DecisionStep(
+                name="Check Route Health",
+                status="skipped",
+                detail="Not required by policy",
+                duration_ms=duration
+            ))
+        
+        # ── Step 5: Get Quote ─────────────────────────────────────
+        step_start = time.time()
+        try:
+            quote_args = {
+                "fromChain": intent.from_chain_id(),
+                "toChain": intent.to_chain_id(),
+                "fromToken": intent.from_token_address(),
+                "toToken": intent.to_token_address(),
+                "amount": amount_to_raw(intent.amount, intent.token),
+                "userAddress": intent.address,
+            }
+            result = self.mcp.call("request-quote", quote_args)
+            
+            if "error" in result:
+                duration = int((time.time() - step_start) * 1000)
+                steps.append(DecisionStep(
+                    name="Get Quote",
+                    status="failed",
+                    detail=result.get("error", "Unknown error"),
+                    duration_ms=duration,
+                    mcp_tool="request-quote",
+                    mcp_args=quote_args,
+                    mcp_result=result
+                ))
+                return DecisionResult(
+                    verdict="REFUSED",
+                    reason=f"Failed to get quote: {result.get('error', 'Unknown error')}",
+                    steps=steps,
+                    intent=intent,
+                    policy=policy,
+                    total_duration_ms=int((time.time() - start_time) * 1000)
+                )
+            
+            quote_data = result.get("data", {})
+            quotes = quote_data.get("quotes", [])
+            
+            if not quotes:
+                duration = int((time.time() - step_start) * 1000)
+                steps.append(DecisionStep(
+                    name="Get Quote",
+                    status="failed",
+                    detail="No quotes returned",
+                    duration_ms=duration,
+                    mcp_tool="request-quote",
+                    mcp_args=quote_args,
+                    mcp_result=result
+                ))
+                return DecisionResult(
+                    verdict="REFUSED",
+                    reason="No quotes available for this route.",
+                    steps=steps,
+                    intent=intent,
+                    policy=policy,
+                    total_duration_ms=int((time.time() - start_time) * 1000)
+                )
+            
+            q = quotes[0]
+            output_amount = q.get("outputAmount", "0")
+            quote_id = q.get("quoteId", "")
+            
+            duration = int((time.time() - step_start) * 1000)
+            steps.append(DecisionStep(
+                name="Get Quote",
+                status="passed",
+                detail=f"Output: {output_amount}, Quote ID: {quote_id[:16]}...",
+                duration_ms=duration,
+                mcp_tool="request-quote",
+                mcp_args=quote_args,
+                mcp_result=result
+            ))
+            
+        except Exception as e:
+            duration = int((time.time() - step_start) * 1000)
+            steps.append(DecisionStep(
+                name="Get Quote",
+                status="failed",
+                detail=f"Error: {e}",
+                duration_ms=duration,
+                mcp_tool="request-quote"
+            ))
+            return DecisionResult(
+                verdict="REFUSED",
+                reason=f"Failed to get quote: {e}",
+                steps=steps,
+                intent=intent,
+                policy=policy,
+                total_duration_ms=int((time.time() - start_time) * 1000)
+            )
+        
+        # ── Step 6: Calculate Fee ─────────────────────────────────
+        step_start = time.time()
+        fee_pct = self._calc_fee(intent.amount, output_amount)
+        fee_pct_float = float(fee_pct) if fee_pct else 999.0
+        duration = int((time.time() - step_start) * 1000)
+        
+        steps.append(DecisionStep(
+            name="Calculate Fee",
+            status="passed",
+            detail=f"Fee: {fee_pct}%",
+            duration_ms=duration
+        ))
+        
+        # ── Step 7: Check Policy Constraints ──────────────────────
+        step_start = time.time()
+        policy_passed = True
+        policy_reason = ""
+        
+        # Check max fee
+        if policy.max_fee_pct is not None:
+            fee_ok = fee_pct_float <= policy.max_fee_pct
+            steps.append(DecisionStep(
+                name="Fee Policy",
+                status="passed" if fee_ok else "failed",
+                detail=f"Fee {fee_pct}% {'≤' if fee_ok else '>'} limit {policy.max_fee_pct}%",
+                duration_ms=0
+            ))
+            if not fee_ok:
+                policy_passed = False
+                policy_reason = f"The quote fee is {fee_pct}%, which exceeds the user limit of {policy.max_fee_pct}%."
+        
+        # Check min output
+        if policy.min_output_amount is not None:
+            output_float = float(output_amount) if output_amount else 0
+            output_ok = output_float >= policy.min_output_amount
+            steps.append(DecisionStep(
+                name="Output Policy",
+                status="passed" if output_ok else "failed",
+                detail=f"Output {output_amount} {'≥' if output_ok else '<'} min {policy.min_output_amount}",
+                duration_ms=0
+            ))
+            if not output_ok:
+                policy_passed = False
+                policy_reason = f"Output {output_amount} is below minimum {policy.min_output_amount}."
+        
+        # Check avoid chains
+        if policy.avoid_chains:
+            if intent.to_chain in policy.avoid_chains:
+                steps.append(DecisionStep(
+                    name="Avoid Chains",
+                    status="failed",
+                    detail=f"Target chain {intent.to_chain} is in avoid list: {', '.join(policy.avoid_chains)}",
+                    duration_ms=0
+                ))
+                policy_passed = False
+                policy_reason = f"Target chain {intent.to_chain} is in the avoid list."
+            else:
+                steps.append(DecisionStep(
+                    name="Avoid Chains",
+                    status="passed",
+                    detail=f"Target chain {intent.to_chain} is not in avoid list",
+                    duration_ms=0
+                ))
+        
+        # Check cross-chain allowance
+        if not policy.allow_cross_chain and intent.from_chain != intent.to_chain:
+            steps.append(DecisionStep(
+                name="Cross-Chain",
+                status="failed",
+                detail="Cross-chain transfer not allowed by policy",
+                duration_ms=0
+            ))
+            policy_passed = False
+            policy_reason = "Cross-chain transfer is not allowed by policy."
+        elif not policy.allow_cross_chain:
+            steps.append(DecisionStep(
+                name="Cross-Chain",
+                status="passed",
+                detail="Same-chain transfer allowed",
+                duration_ms=0
+            ))
+        
+        duration = int((time.time() - step_start) * 1000)
+        
+        # ── Step 8: Final Verdict ─────────────────────────────────
+        if policy_passed:
+            reason_parts = [f"This intent satisfies the user policy."]
+            if fee_pct:
+                reason_parts.append(f"Fee {fee_pct}% is within acceptable limits.")
+            if policy.prefer_cheapest:
+                reason_parts.append("Route selected based on cheapest option.")
+            
+            return DecisionResult(
+                verdict="EXECUTABLE",
+                reason=" ".join(reason_parts),
+                steps=steps,
+                intent=intent,
+                policy=policy,
+                quote_data=quote_data,
+                total_duration_ms=int((time.time() - start_time) * 1000)
+            )
+        else:
+            return DecisionResult(
+                verdict="REFUSED",
+                reason=f"{policy_reason} The agent refuses to prepare the order.",
+                steps=steps,
+                intent=intent,
+                policy=policy,
+                quote_data=quote_data,
+                total_duration_ms=int((time.time() - start_time) * 1000)
+            )
+
     def compare_quotes(self, intent: Intent, chains: list[str] = None) -> list[dict]:
         """Compare quotes across multiple destination chains."""
         if chains is None:
@@ -1214,30 +1580,50 @@ def interactive():
                 console.print(f"  Intent: [bold]{intent.amount} {intent.token.upper()} {intent.from_chain} → {intent.to_chain}[/bold]")
                 console.print(f"  Policy: [dim]{policy}[/dim]\n")
                 
-                # Execute Safe Verdict pipeline
+                # Execute Safe Verdict pipeline with trace
                 with Progress(SpinnerColumn(), TextColumn("[bold blue]Running Safe Verdict checks...[/bold blue]"), transient=True) as progress:
                     progress.add_task("verdict", total=None)
-                    verdict = agent.safe_verdict(intent, policy)
+                    result = agent.safe_verdict_trace(intent, policy)
                 
                 # Display verdict
-                if verdict.executable:
-                    console.print(f"  [bold green]✓ Verdict: EXECUTABLE[/bold green]\n")
+                if result.verdict == "EXECUTABLE":
+                    console.print(f"  [bold green]✓ Verdict: EXECUTABLE[/bold green]")
                 else:
-                    console.print(f"  [bold red]✗ Verdict: REFUSED[/bold red]\n")
+                    console.print(f"  [bold red]✗ Verdict: REFUSED[/bold red]")
                 
-                # Display checks
-                console.print("  [bold]Checks:[/bold]")
-                for check in verdict.checks:
-                    icon = "[green]✓[/green]" if check["passed"] else "[red]✗[/red]"
-                    console.print(f"    {icon} {check['name']}: {check['detail']}")
+                # Display decision trace
+                console.print(f"\n  [bold]Decision Trace:[/bold]")
+                for i, step in enumerate(result.steps, 1):
+                    # Status icon
+                    if step.status == "passed":
+                        icon = "[green]✓[/green]"
+                    elif step.status == "failed":
+                        icon = "[red]✗[/red]"
+                    elif step.status == "warning":
+                        icon = "[yellow]⚠[/yellow]"
+                    else:  # skipped
+                        icon = "[dim]○[/dim]"
+                    
+                    # Duration
+                    duration_str = f" ({step.duration_ms}ms)" if step.duration_ms > 0 else ""
+                    
+                    # MCP tool info
+                    mcp_str = ""
+                    if step.mcp_tool:
+                        mcp_str = f" [dim]via {step.mcp_tool}[/dim]"
+                    
+                    console.print(f"    {icon} {step.name}: {step.detail}{duration_str}{mcp_str}")
                 
                 # Display reason
                 console.print(f"\n  [bold]Reason:[/bold]")
-                console.print(f"    {verdict.reason}")
+                console.print(f"    {result.reason}")
+                
+                # Display timing
+                console.print(f"\n  [dim]Total duration: {result.total_duration_ms}ms[/dim]")
                 
                 # If executable, show quote details
-                if verdict.executable and verdict.quote_data:
-                    quotes = verdict.quote_data.get("quotes", [])
+                if result.verdict == "EXECUTABLE" and result.quote_data:
+                    quotes = result.quote_data.get("quotes", [])
                     if quotes:
                         q = quotes[0]
                         console.print(f"\n  [bold]Quote Details:[/bold]")

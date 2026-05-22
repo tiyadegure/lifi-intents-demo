@@ -8,12 +8,13 @@ LI.FI Intents × AI Agent: Safe Verdict — 策略驱动的跨链安全裁决
 
 ## 项目亮点
 1. **Safe Verdict 引擎** - 策略驱动的安全裁决，不是简单报价
-2. **AI 意图解析** - 自然语言 → 跨链操作 + 策略约束
-3. **MCP 协议集成** - 直接调用 LI.FI Intents
-4. **完整工具链** - Web UI + CLI + SDK
-5. **Solver 生态** - Route Health、Quote Inventory、Become a Solver
+2. **Decision Trace** - 逐步追踪决策过程，展示 MCP 调用细节
+3. **AI 意图解析** - 自然语言 → 跨链操作 + 策略约束
+4. **MCP 协议集成** - 直接调用 LI.FI Intents
+5. **完整工具链** - Web UI + CLI + SDK
+6. **Solver 生态** - Route Health、Quote Inventory、Become a Solver
 
-## 核心功能：Safe Verdict
+## 核心功能：Safe Verdict + Decision Trace
 ```
 用户输入: "send 10 USDC from Base to Arbitrum only if fee < 0.5% avoid Ethereum"
 
@@ -21,11 +22,13 @@ LI.FI Intents × AI Agent: Safe Verdict — 策略驱动的跨链安全裁决
   - Intent: 10 USDC base → arbitrum
   - Policy: fee < 0.5%, avoid ethereum
 
-Safe Verdict Pipeline:
-  ✓ Route Supported: base → arbitrum (USDC)
-  ✓ Route Health: Skipped (not required by policy)
-  ✓ Quote Received: Output: 9.98 USDC
-  ✓ Fee Calculated: 0.18%
+Decision Trace:
+  ✓ Parse Intent: 10 USDC base → arbitrum
+  ✓ Parse Policy: Policy(fee<0.5%, avoid ethereum)
+  ✓ Check Supported Route: base → arbitrum (USDC) (986ms) via get-supported-routes
+  ○ Check Route Health: Not required by policy
+  ✓ Get Quote: Output: 9.98 USDC, Quote ID: abc123... (2341ms) via request-quote
+  ✓ Calculate Fee: 0.18%
   ✓ Fee Policy: Fee 0.18% ≤ limit 0.5%
   ✓ Avoid Chains: Target chain arbitrum is not in avoid list
 
@@ -33,6 +36,31 @@ Verdict: EXECUTABLE
 
 Reason:
   This intent satisfies the user policy. Fee 0.18% is within acceptable limits.
+
+Total duration: 3327ms
+```
+
+## Decision Trace 数据结构
+```python
+@dataclass
+class DecisionStep:
+    name: str           # step name (e.g., "Route Supported", "Fee Policy")
+    status: str         # "passed", "failed", "warning", "skipped"
+    detail: str         # human-readable detail
+    duration_ms: int    # time taken in milliseconds
+    mcp_tool: str       # MCP tool called (if any)
+    mcp_args: Dict      # MCP arguments
+    mcp_result: Dict    # raw MCP result
+
+@dataclass
+class DecisionResult:
+    verdict: str        # "EXECUTABLE" or "REFUSED"
+    reason: str         # human-readable reason
+    steps: List[DecisionStep]  # ordered list of decision steps
+    intent: Intent      # parsed intent
+    policy: Policy      # parsed policy
+    quote_data: Dict    # raw quote data
+    total_duration_ms: int  # total time taken
 ```
 
 ## 支持的自然语言策略

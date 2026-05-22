@@ -5,6 +5,7 @@
 ## ✨ 功能亮点
 
 - 🛡️ **Safe Verdict** - 策略驱动的安全裁决（EXECUTABLE or REFUSED）
+- 🔍 **Decision Trace** - 逐步追踪决策过程，展示 MCP 调用细节
 - 🤖 **AI 意图解析** - 自然语言 → 跨链操作 + 策略约束
 - 🔗 **MCP 协议集成** - 直接调用 LI.FI Intents
 - 📊 **Web UI Dashboard** - 报价历史、统计面板、Solver 工具
@@ -36,7 +37,7 @@ source .venv/bin/activate
 # 运行 CLI
 python -m lifi_agent
 
-# Safe Verdict 示例
+# Safe Verdict 示例（带决策追踪）
 > safe send 10 USDC from Base to Arbitrum if fee < 0.5%
 > safe send 10 USDC from Base to Arbitrum if fee < 0.1% and route is healthy
 > safe send 10 USDC from Base to Arbitrum avoid Ethereum prefer cheapest route
