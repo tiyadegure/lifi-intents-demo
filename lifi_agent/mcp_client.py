@@ -6,7 +6,10 @@ Handles session management, rate limiting, and fallback to cache.
 import httpx
 import json
 import time
+import logging
 from typing import Optional, Any
+
+logger = logging.getLogger(__name__)
 
 MCP_URL = "https://intents-mcp.li.fi/mcp"
 CACHE_TTL = 300  # 5 min cache
@@ -97,7 +100,9 @@ class MCPClient:
             except Exception as e:
                 last_error = {"error": str(e)}
                 if attempt < retries:
-                    time.sleep(2)
+                    delay = 2 ** (attempt + 1)
+                    logger.warning("Retry %d/%d for %s after error: %s (waiting %ds)", attempt + 1, retries, tool, e, delay)
+                    time.sleep(delay)
                 continue
 
             if r.status_code == 400:
@@ -105,7 +110,9 @@ class MCPClient:
                     err_msg = r.json().get("error", {}).get("message", "")
                     last_error = {"error": err_msg}
                     if "No valid session" in err_msg and attempt < retries:
-                        time.sleep(3)
+                        delay = 2 ** (attempt + 1)
+                        logger.warning("Retry %d/%d for %s: session expired (waiting %ds)", attempt + 1, retries, tool, delay)
+                        time.sleep(delay)
                         continue
                 except Exception:
                     pass
@@ -132,6 +139,10 @@ class MCPClient:
             return {"error": "No data in response"}
 
         return last_error or {"error": "Max retries exceeded"}
+
+    def warmup(self):
+        """Prime the session cache by calling get-supported-routes once."""
+        self.call("get-supported-routes", {})
 
     def close(self):
         self.client.close()

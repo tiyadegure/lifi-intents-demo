@@ -9,6 +9,7 @@ Usage:
 import sys
 import json
 import os
+import time
 from pathlib import Path
 from .mcp_client import MCPClient
 
@@ -88,6 +89,23 @@ class Intent:
         return f"Intent({self.amount} {self.token.upper()} {self.from_chain}→{self.to_chain})"
 
 
+CHAIN_ALIASES = {
+    "arb": "arbitrum", "arbitrum": "arbitrum",
+    "opt": "optimism", "op": "optimism", "optimism": "optimism",
+    "poly": "polygon", "polygon": "polygon",
+    "eth": "ethereum", "ethereum": "ethereum",
+    "base": "base",
+    "bsc": "bsc",
+    "avax": "avalanche", "avalanche": "avalanche",
+    "zksync": "zksync",
+    "linea": "linea",
+    "scroll": "scroll",
+    "blast": "blast",
+    "mantle": "mantle",
+    "sonic": "sonic",
+}
+
+
 def parse_intent(text: str) -> Intent:
     """Parse natural language into a cross-chain intent.
 
@@ -99,6 +117,15 @@ def parse_intent(text: str) -> Intent:
     import re
     text = text.lower().strip()
 
+    # Normalize arrow syntax: "base->arb", "base to arb", "bridge X eth to poly"
+    arrow_match = re.search(r'(\w+)\s*(?:->|→)\s*(\w+)', text)
+    if arrow_match:
+        src, dst = arrow_match.group(1), arrow_match.group(2)
+        src_full = CHAIN_ALIASES.get(src, src)
+        dst_full = CHAIN_ALIASES.get(dst, dst)
+        if src_full in CHAINS and dst_full in CHAINS:
+            text = text[:arrow_match.start()] + f"from {src_full} to {dst_full}" + text[arrow_match.end():]
+
     # Extract amount + token
     amount_match = re.search(r'(\d+\.?\d*)\s*(usdc|usdt|eth|weth)', text)
     if not amount_match:
@@ -108,10 +135,13 @@ def parse_intent(text: str) -> Intent:
 
     # Extract chains by position in text (earliest = from, latest = to)
     chain_positions = []
-    for name in CHAINS:
-        pos = text.find(name)
+    for alias, full_name in CHAIN_ALIASES.items():
+        pos = text.find(alias)
+        # Avoid matching substrings (e.g. "base" inside "database")
         if pos >= 0:
-            chain_positions.append((pos, name))
+            end = pos + len(alias)
+            if (pos == 0 or not text[pos-1].isalpha()) and (end >= len(text) or not text[end].isalpha()):
+                chain_positions.append((pos, full_name))
     chain_positions.sort()
 
     if len(chain_positions) < 2:
@@ -122,13 +152,25 @@ def parse_intent(text: str) -> Intent:
     from_match = re.search(r'from\s+(\w+)', text)
     to_match = re.search(r'to\s+(\w+)', text)
 
-    if from_match and from_match.group(1) in CHAINS:
-        from_chain = from_match.group(1)
+    if from_match:
+        src = from_match.group(1)
+        if src in CHAINS:
+            from_chain = src
+        elif src in CHAIN_ALIASES:
+            from_chain = CHAIN_ALIASES[src]
+        else:
+            from_chain = chain_positions[0][1]
     else:
         from_chain = chain_positions[0][1]
 
-    if to_match and to_match.group(1) in CHAINS:
-        to_chain = to_match.group(1)
+    if to_match:
+        dst = to_match.group(1)
+        if dst in CHAINS:
+            to_chain = dst
+        elif dst in CHAIN_ALIASES:
+            to_chain = CHAIN_ALIASES[dst]
+        else:
+            to_chain = chain_positions[-1][1]
     else:
         to_chain = chain_positions[-1][1]
 
@@ -145,6 +187,7 @@ class LifAgent:
     def __init__(self):
         self.mcp = MCPClient()
         self.history: list[dict] = []
+        self.quote_history: list[dict] = []
         self.preferences: dict = {"default_chain": None, "default_token": "usdc", "favorite_routes": []}
         self.pending_order: dict = {}
         self._load_prefs()
@@ -216,6 +259,14 @@ class LifAgent:
         if "Unknown token" in raw:
             result["suggestion"] = f"Token {intent.token.upper()} may not be available on {intent.from_chain}. Try: routes"
             result["error"] = raw
+
+        if "error" not in result:
+            self.quote_history.append({
+                "timestamp": time.time(),
+                "intent": repr(intent),
+                "result": result,
+            })
+            self.quote_history = self.quote_history[-10:]
 
         return result
 
@@ -343,6 +394,7 @@ def interactive():
     print("  orders                               — Show recent orders")
     print("  favorites                            — Show saved routes")
     print("  yes / confirm                        — Confirm pending order")
+    print("  history                              — Show recent quotes")
     print("  quit                                 — Exit")
     print()
 
@@ -442,6 +494,20 @@ def interactive():
                     print(f"    {i}. {parts[0].title()} → {parts[1].title()} ({parts[2].upper()})")
             else:
                 print("\n  No saved routes yet. Execute a transfer to save it.")
+            print()
+            continue
+
+        if text == "history":
+            recent = agent.quote_history[-5:]
+            if recent:
+                print(f"\n  Recent quotes (last {len(recent)}):")
+                for i, entry in enumerate(recent, 1):
+                    ts = time.strftime("%H:%M:%S", time.localtime(entry["timestamp"]))
+                    quotes = entry["result"].get("data", {}).get("quotes", [])
+                    output = quotes[0].get("outputAmount", "?") if quotes else "?"
+                    print(f"    {i}. [{ts}] {entry['intent']} → {output}")
+            else:
+                print("\n  No quote history yet.")
             print()
             continue
 
