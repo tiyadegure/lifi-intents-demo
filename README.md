@@ -1,143 +1,157 @@
 # LI.FI Intents × AI Agent
 
-> AI agents executing cross-chain token transfers through MCP protocol.
-> No browser, no UI, just natural language → intent → solver → delivery.
+> Cross-chain operations via natural language · Built for the [LI.FI Intents Builder Challenge](https://lifi.notion.site/LI-FI-Intents-Mini-Builder-Challenge-366f0ff14ac78168a0cdd9f44a3c1f13)
 
-## What is this?
+## ✨ Features
 
-A working AI agent that interacts with [LI.FI Intents](https://docs.li.fi/lifi-intents/introduction) through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/). The agent discovers routes, requests quotes from the solver network, compares options, and executes cross-chain transfers — all through natural language.
+- **Natural Language Intents** — `send 10 USDC base->arb`, `bridge 50 USDC eth to poly`
+- **MCP Integration** — Real-time quotes via LI.FI Intents MCP Server
+- **Web UI** — Dark-themed dashboard with quote comparison, solver analytics, and transaction tracking
+- **Rich CLI** — Auto-completion, color-coded output, interactive prompts
+- **SQLite Persistence** — Quote history survives across sessions
+- **Smart Retry** — Exponential backoff with rate limiting
+- **Async Support** — Parallel quote fetching for faster comparisons
 
-## Quick Start
+## 🚀 Quick Start
 
 ```bash
 # Clone
-git clone https://github.com/tiyadegure/lifi-intents-demo.git
+git clone https://github.com/tiyadegure/lifi-intents-demo
 cd lifi-intents-demo
 
 # Install
-python3 -m venv .venv
-.venv/bin/pip install httpx
+pip install -e .
 
 # Run CLI
-.venv/bin/python3 -m lifi_agent
+python -m lifi_agent
 
-# Run Web UI
-.venv/bin/pip install fastapi uvicorn
-.venv/bin/python3 -m uvicorn lifi_agent.server:app --host 0.0.0.0 --port 8888
-# Open http://localhost:8888
+# Start Web UI
+uvicorn lifi_agent.server:app --port 8888
 ```
 
-## Usage
+## 📖 Usage
+
+### CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `send 10 USDC base->arb` | Execute a cross-chain transfer |
+| `compare 50 USDC from Ethereum` | Compare quotes across chains |
+| `routes` | Show supported routes |
+| `orders` | Show recent orders |
+| `favorites` | Show saved routes |
+| `history` | Show recent quotes (SQLite) |
+| `stats` | Show quote statistics |
+| `wallet` | Show demo wallet info |
+| `quit` | Exit |
+
+### Input Formats
 
 ```
-You > send 10 USDC from Base to Arbitrum
-
-  Intent: Intent(10 USDC base→arbitrum)
-  Fetching quote...
-
-  ✓ Quote from solver:
-    Input:    10 USDC
-    Output:   9.983725 USDC
-    Quote ID: quote_xxx
-
-  Type 'yes' to prepare order, 'no' to cancel
-
-You > yes
-  ✓ Order prepared!
-    Route saved to favorites!
+send 10 USDC from Base to Arbitrum
+bridge 50 USDC eth to poly
+transfer 100 USDC base->arb
+10 USDC base→arbitrum
 ```
 
-### Commands
-
-- `send 10 USDC from Base to Arbitrum` — Execute a transfer
-- `compare 10 USDC from Ethereum` — Compare quotes across chains
-- `routes` — Show supported routes
-- `orders` — Show recent orders
-- `favorites` — Show saved routes
-- `yes / no` — Confirm or cancel pending order
-
-## Architecture
+## 🏗️ Architecture
 
 ```
-User Intent (natural language)
-    ↓
-Intent Parser (chain/token/amount extraction)
-    ↓
-MCP Client (session management, caching, retry)
-    ↓
-LI.FI Intents MCP Server (intents-mcp.li.fi/mcp)
-    ↓
-Order Server → Solver Network → Delivery
+User Input → Intent Parser → AI Agent → MCP Client → LI.FI MCP Server
+                ↓                              ↓
+           Chain Aliases              Rate Limiting + Cache
+                ↓                              ↓
+           Rich CLI/Web UI ←──── Quote Results + Analytics
 ```
 
-## Key Concepts
+### Components
 
-### LI.FI Intents
-An intent-based cross-chain marketplace where:
-- Users express **what** they want (e.g., "send 10 USDC from Base to Arbitrum")
-- **Solvers** compete to fill orders using pre-published standing quotes
-- Delivery is instant — solvers use their own capital, settlement happens later
+- **Intent Parser** — NL to structured intents with chain aliases
+- **MCP Client** — Session management, caching, retry, async support
+- **AI Agent** — Quote orchestration, history tracking, preferences
+- **Web UI** — FastAPI + vanilla JS, dark navy theme
+- **CLI** — Rich + prompt_toolkit, auto-completion
 
-### MCP (Model Context Protocol)
-A standard protocol for AI tools. LI.FI provides a hosted MCP server at `intents-mcp.li.fi/mcp` with 13 tools for:
-- Route discovery
-- Quote requests
-- Order management
-- Solver operations
+## 🎨 Web UI
 
-## MCP Server
+The Web UI includes:
 
-**Endpoint:** `https://intents-mcp.li.fi/mcp`
+- **Quote Result** — Real-time quotes with fee calculation
+- **Route Comparison** — Multi-chain comparison with best route highlighting
+- **Agent Reasoning** — Step-by-step MCP call visualization
+- **Solver Network** — Active solver cards with chain coverage
+- **Solver Analytics** — Stats cards + chain distribution chart
+- **Transaction Tracker** — Order status timeline with auto-refresh
+- **Quote Statistics** — Total quotes, average fee, top routes/tokens
 
-**Integrator tools (no API key):**
-- `get-supported-routes` — Discover chains & tokens
-- `request-quote` — Get solver pricing
-- `prepare-order` — Build on-chain order
-- `submit-order` — Submit signed order
-- `track-order` — Monitor settlement
-- `list-orders` — List order history
+## 🔧 Technical Highlights
 
-**Solver tools (API key required):**
-- `get-solver-identities` — View registered addresses
-- `get-quote-inventory` — View standing quotes
-- `submit-standing-quotes` — Submit/update pricing
-- `debug-order` — Inspect order lifecycle
-- `check-route-health` — Route diagnostics
+### MCP Client
+- Exponential backoff retry (2s, 4s, 8s)
+- Rate limiting (min 1s between calls)
+- Connection pooling (lazy-init clients)
+- 5-minute response caching
+- Async support with `call_async()`
 
-## Project Structure
+### Agent
+- SQLite persistence for quote history
+- Chain alias resolution (arb, poly, op, avax)
+- Arrow syntax support (base->arb, eth→poly)
+- Multi-criteria route comparison
+- Preference memory (favorite routes)
 
-```
-lifi-intents-demo/
-├── lifi_agent/
-│   ├── __init__.py       # Package exports
-│   ├── __main__.py       # CLI entry point
-│   ├── agent.py          # Agent, intent parser, interactive CLI
-│   ├── mcp_client.py     # MCP client with caching & retry
-│   └── server.py         # Web UI (FastAPI + reasoning traces)
-├── demo/
-│   └── agent_demo.py     # Terminal demo script (simulated)
-├── remotion/
-│   └── src/Demo.tsx      # Video generation (Remotion)
-├── output/
-│   └── demo_v2.mp4       # Demo video with narration
-├── pyproject.toml        # SDK packaging (pip install lifi-agent)
-├── requirements.txt
-└── x_thread.md           # X Thread draft
+### CLI
+- Rich panels and tables
+- Color-coded chain names
+- Fee color coding (green <0.2%, yellow <0.5%, red ≥0.5%)
+- prompt_toolkit auto-completion
+- Progress spinners during API calls
+
+## 📦 SDK
+
+Install as a Python package:
+
+```bash
+pip install lifi-agent
 ```
 
-## Demo Video
+Use in your code:
 
-A polished video version with narration is available in `output/demo_v2.mp4` (70s, 1080p).
+```python
+from lifi_agent import LifAgent, parse_intent
 
-## Links
+agent = LifAgent()
+agent.connect()
 
-- **Docs:** https://docs.li.fi/lifi-intents/introduction
-- **MCP Server:** https://intents-mcp.li.fi/mcp
-- **Challenge:** https://lifi.notion.site/LI-FI-Intents-Mini-Builder-Challenge-366f0ff14ac78168a0cdd9f44a3c1f13
+intent = parse_intent("send 10 USDC base->arb")
+result = agent.get_quote(intent)
+print(result)
+```
 
-## Built with
+## 🛠️ Development
 
-- [LI.FI Intents MCP Server](https://intents-mcp.li.fi/mcp)
-- [Remotion](https://www.remotion.dev/) — Video generation
-- [edge-tts](https://github.com/rany2/edge-tts) — Narration
-- [Hermes Agent](https://hermes-agent.nousresearch.com/) — AI agent platform
+```bash
+# Install dev dependencies
+pip install -e ".[dev]"
+
+# Run tests
+pytest
+
+# Start dev server
+uvicorn lifi_agent.server:app --reload --port 8888
+```
+
+## 📝 License
+
+MIT
+
+## 🙏 Acknowledgments
+
+- [LI.FI](https://li.fi) for the Intents MCP Server
+- [Model Context Protocol](https://modelcontextprotocol.io) for the spec
+- [Rich](https://rich.readthedocs.io/) for terminal formatting
+- [FastAPI](https://fastapi.tiangolo.com/) for the web framework
+
+---
+
+*Built for the LI.FI Intents Builder Challenge*
