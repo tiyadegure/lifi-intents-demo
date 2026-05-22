@@ -8,6 +8,7 @@ import asyncio
 import collections
 import html as html_mod
 import json
+import os
 import threading
 import time
 
@@ -63,7 +64,9 @@ async def startup():
 
 
 def ensure_connected():
-    """Lazy MCP connection."""
+    """Lazy MCP connection (skip in demo mode)."""
+    if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1":
+        return
     if not agent.mcp._connected:
         with _connect_lock:
             if not agent.mcp._connected:
