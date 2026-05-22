@@ -224,6 +224,19 @@ def amount_to_raw(human_amount: str, token: str) -> str:
     except ValueError:
         return human_amount
 
+
+def raw_to_amount(raw_amount: str, token: str) -> float:
+    """Convert raw amount (from MCP) back to human-readable amount.
+    
+    Example: raw_to_amount("9980000", "usdc") -> 9.98
+    """
+    decimals = TOKEN_DECIMALS.get(token.lower(), 18)
+    try:
+        cleaned = ''.join(c for c in raw_amount if c.isdigit())
+        return int(cleaned) / (10 ** decimals)
+    except (ValueError, OverflowError):
+        return 0.0
+
 # Configurable demo address (set DEMO_ADDRESS env var for production)
 DEMO_ADDRESS = os.environ.get("DEMO_ADDRESS", "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045")
 
@@ -665,7 +678,7 @@ class LifAgent:
                     token=intent.token,
                     input_amount=intent.amount,
                     output_amount=output,
-                    fee_pct=self._calc_fee(intent.amount, output),
+                    fee_pct=self._calc_fee(intent.amount, output, intent.token),
                     quote_id=q.get("quoteId", "")
                 )
 
@@ -798,7 +811,7 @@ class LifAgent:
             return Verdict(executable=False, checks=checks, reason=f"Failed to get quote: {e}")
         
         # ── Step 4: Calculate fee ─────────────────────────────────
-        fee_pct = self._calc_fee(intent.amount, output_amount)
+        fee_pct = self._calc_fee(intent.amount, output_amount, intent.token)
         fee_pct_float = float(fee_pct) if fee_pct else 999.0
         
         checks.append({
@@ -1125,7 +1138,7 @@ class LifAgent:
         
         # ── Step 6: Calculate Fee ─────────────────────────────────
         step_start = time.time()
-        fee_pct = self._calc_fee(intent.amount, output_amount)
+        fee_pct = self._calc_fee(intent.amount, output_amount, intent.token)
         fee_pct_float = float(fee_pct) if fee_pct else 999.0
         duration = int((time.time() - step_start) * 1000)
         
@@ -1255,7 +1268,7 @@ class LifAgent:
                         "chain": chain,
                         "output": output,
                         "quote_id": q.get("quoteId", ""),
-                        "fee_pct": self._calc_fee(intent.amount, output),
+                        "fee_pct": self._calc_fee(intent.amount, output, intent.token),
                     })
             except Exception as e:
                 logging.debug(f"Quote failed for {chain}: {e}")
@@ -1271,15 +1284,28 @@ class LifAgent:
         results.sort(key=parse_output, reverse=True)
         return results
 
-    def _calc_fee(self, input_amount: str, output_amount: str) -> Optional[str]:
-        """Calculate fee percentage. Returns None on error."""
+    def _calc_fee(self, input_amount: str, output_amount: str, token: str = "usdc") -> Optional[str]:
+        """Calculate fee percentage. Returns None on error.
+        
+        input_amount: human-readable (e.g. "10")
+        output_amount: raw from MCP (e.g. "9980000") or human-readable (e.g. "9.98")
+        token: token symbol for decimal conversion
+        """
         try:
             inp = float(input_amount)
+            # Try to detect if output is raw (large integer) vs human-readable
             out_str = ''.join(c for c in output_amount if c.isdigit() or c == '.')
-            out = float(out_str)
+            out_raw = float(out_str)
+            
+            # If output looks like a raw amount (> 1000x input), convert it
+            if out_raw > inp * 1000:
+                out_human = raw_to_amount(output_amount, token)
+            else:
+                out_human = out_raw
+            
             if inp == 0:
                 return None
-            fee = (inp - out) / inp * 100
+            fee = (inp - out_human) / inp * 100
             return f"{fee:.2f}"
         except (ValueError, ZeroDivisionError):
             return None
@@ -2166,7 +2192,7 @@ def interactive():
         if quotes:
             q = quotes[0]
             # Build a styled quote panel
-            fee_pct = agent._calc_fee(intent.amount, q.get("outputAmount", "0"))
+            fee_pct = agent._calc_fee(intent.amount, q.get("outputAmount", "0"), intent.token)
             quote_text = Text()
             quote_text.append("Input:     ", style="dim")
             quote_text.append(f"{q.get('inputAmount', '?')}\n")

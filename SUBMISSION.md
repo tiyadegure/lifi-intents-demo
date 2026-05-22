@@ -62,23 +62,27 @@ class SolverReport:
 
 ## 核心功能：Doctor 命令
 ```
-命令: doctor
+命令: python -m lifi_agent doctor
 
 输出:
   LI.FI Intents MCP Doctor
 
-  ✓ MCP endpoint reachable: Connected to lifi-intents
-  ✓ MCP session initialized: Session ID: 6f5521b0...
-  ✓ get-supported-routes works: 0 routes available
-  ✓ Base USDC address configured: 0x833589fC...
-  ✓ Arbitrum USDC address configured: 0xaf88d065...
-  ✓ route health tool reachable: Tool responded
-  ✗ request-quote works: Unknown token "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" on Base
+  ✓ MCP endpoint reachable
+  ✓ MCP session initialized
+  ✓ get-supported-routes works
+  ✓ Base USDC address configured
+  ✓ Arbitrum USDC address configured
+  ✓ route health tool reachable
+  ✓ request-quote works
 
   Warnings:
   ! OPENAI_API_KEY not set: Using deterministic parser
-  ! Amount unit behavior: Should be verified before real execution
 ```
+
+Doctor surfaces integration issues instead of hiding them.
+If the MCP quote endpoint rejects a token mapping or a route is unavailable,
+Doctor shows the exact failure and points developers to token/route configuration.
+This is a developer tool — it helps others debug their own LI.FI Intents integrations.
 
 ## Doctor 命令检查项
 1. **MCP endpoint reachable**: 检查 MCP 服务器是否可达
@@ -196,7 +200,7 @@ Parse Intent + Policy
 - ✅ 交易追踪
 
 ## 演示链接
-- **Web UI**: http://143.198.95.119:8888
+- **Web UI**: http://lifi.degure.me
 - **GitHub**: https://github.com/tiyadegure/lifi-intents-demo
 - **Demo 视频**: output/demo_v2.mp4
 
