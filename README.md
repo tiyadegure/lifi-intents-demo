@@ -18,8 +18,13 @@ cd lifi-intents-demo
 python3 -m venv .venv
 .venv/bin/pip install httpx
 
-# Run
+# Run CLI
 .venv/bin/python3 -m lifi_agent
+
+# Run Web UI
+.venv/bin/pip install fastapi uvicorn
+.venv/bin/python3 -m uvicorn lifi_agent.server:app --host 0.0.0.0 --port 8888
+# Open http://localhost:8888
 ```
 
 ## Usage
@@ -107,13 +112,16 @@ lifi-intents-demo/
 │   ├── __init__.py       # Package exports
 │   ├── __main__.py       # CLI entry point
 │   ├── agent.py          # Agent, intent parser, interactive CLI
-│   └── mcp_client.py     # MCP client with caching & retry
+│   ├── mcp_client.py     # MCP client with caching & retry
+│   └── server.py         # Web UI (FastAPI + reasoning traces)
 ├── demo/
 │   └── agent_demo.py     # Terminal demo script (simulated)
 ├── remotion/
 │   └── src/Demo.tsx      # Video generation (Remotion)
 ├── output/
 │   └── demo_v2.mp4       # Demo video with narration
+├── pyproject.toml        # SDK packaging (pip install lifi-agent)
+├── requirements.txt
 └── x_thread.md           # X Thread draft
 ```
 
