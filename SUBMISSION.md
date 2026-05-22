@@ -10,10 +10,12 @@ LI.FI Intents × AI Agent: Safe Verdict — 策略驱动的跨链安全裁决
 1. **Safe Verdict 引擎** - 策略驱动的安全裁决，不是简单报价
 2. **Decision Trace** - 逐步追踪决策过程，展示 MCP 调用细节
 3. **Solver-Aware Checks** - 路由健康、报价可用性、Solver 库存检查
-4. **AI 意图解析** - 自然语言 → 跨链操作 + 策略约束
-5. **MCP 协议集成** - 直接调用 LI.FI Intents
-6. **完整工具链** - Web UI + CLI + SDK
-7. **Solver 生态** - Route Health、Quote Inventory、Become a Solver
+4. **Doctor 命令** - MCP 连接和配置诊断
+5. **AI 意图解析** - 自然语言 → 跨链操作 + 策略约束
+6. **MCP 协议集成** - 直接调用 LI.FI Intents
+7. **完整工具链** - Web UI + CLI + SDK
+8. **Solver 生态** - Route Health、Quote Inventory、Become a Solver
+9. **Developer Education** - PITFALLS.md 文档
 
 ## 核心功能：Solver-Aware Checks
 ```
@@ -57,6 +59,50 @@ class SolverReport:
 - **solver base arbitrum USDC USDC**: 包含 Solver 库存检查
 - **route health base arbitrum**: 单独检查路由健康
 - **solver-check**: 别名命令
+
+## 核心功能：Doctor 命令
+```
+命令: doctor
+
+输出:
+  LI.FI Intents MCP Doctor
+
+  ✓ MCP endpoint reachable: Connected to lifi-intents
+  ✓ MCP session initialized: Session ID: 6f5521b0...
+  ✓ get-supported-routes works: 0 routes available
+  ✓ Base USDC address configured: 0x833589fC...
+  ✓ Arbitrum USDC address configured: 0xaf88d065...
+  ✓ route health tool reachable: Tool responded
+  ✗ request-quote works: Unknown token "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" on Base
+
+  Warnings:
+  ! OPENAI_API_KEY not set: Using deterministic parser
+  ! Amount unit behavior: Should be verified before real execution
+```
+
+## Doctor 命令检查项
+1. **MCP endpoint reachable**: 检查 MCP 服务器是否可达
+2. **MCP session initialized**: 检查 MCP 会话是否初始化
+3. **get-supported-routes works**: 检查路由查询功能
+4. **Base USDC address configured**: 检查 Base 链 USDC 地址配置
+5. **Arbitrum USDC address configured**: 检查 Arbitrum 链 USDC 地址配置
+6. **route health tool reachable**: 检查路由健康检查工具
+7. **request-quote works**: 检查报价请求功能
+
+## Developer Education: PITFALLS.md
+项目包含一个专门的文档 **PITFALLS.md**，记录了 10 个 LI.FI Intents MCP 开发陷阱：
+1. MCP response is SSE, not normal JSON
+2. Need initialize + notifications/initialized
+3. Session can expire
+4. Token address differs per chain
+5. Human amount vs base units must be handled carefully
+6. A route can exist but still have no quote
+7. Solver liquidity can affect availability
+8. Rate limiting requires retry/backoff
+9. LLM output should not directly prepare orders
+10. Developer UX needs visible traces
+
+这个文档专门服务于 Developer Education 评分标准。
 ```
 用户输入: "send 10 USDC from Base to Arbitrum only if fee < 0.5% avoid Ethereum"
 

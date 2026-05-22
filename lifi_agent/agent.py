@@ -1441,6 +1441,154 @@ class LifAgent:
         
         return report
 
+    def doctor(self) -> dict:
+        """Run diagnostic checks on the MCP connection and configuration.
+        
+        Returns a diagnostic report with checks and warnings.
+        """
+        report = {
+            "checks": [],
+            "warnings": []
+        }
+        
+        # ── Check 1: MCP endpoint reachable ───────────────────────
+        try:
+            # Try to connect to MCP
+            info = self.mcp.connect()
+            report["checks"].append({
+                "name": "MCP endpoint reachable",
+                "passed": True,
+                "detail": f"Connected to {info.get('serverInfo', {}).get('name', 'unknown')}"
+            })
+        except Exception as e:
+            report["checks"].append({
+                "name": "MCP endpoint reachable",
+                "passed": False,
+                "detail": str(e)
+            })
+        
+        # ── Check 2: MCP session initialized ──────────────────────
+        try:
+            # Check if we have a session ID
+            if self.mcp.session_id:
+                report["checks"].append({
+                    "name": "MCP session initialized",
+                    "passed": True,
+                    "detail": f"Session ID: {self.mcp.session_id[:8]}..."
+                })
+            else:
+                report["checks"].append({
+                    "name": "MCP session initialized",
+                    "passed": False,
+                    "detail": "No session ID"
+                })
+        except Exception as e:
+            report["checks"].append({
+                "name": "MCP session initialized",
+                "passed": False,
+                "detail": str(e)
+            })
+        
+        # ── Check 3: get-supported-routes works ───────────────────
+        try:
+            routes_result = self.get_routes()
+            route_count = routes_result.get("data", {}).get("count", 0)
+            report["checks"].append({
+                "name": "get-supported-routes works",
+                "passed": True,
+                "detail": f"{route_count} routes available"
+            })
+        except Exception as e:
+            report["checks"].append({
+                "name": "get-supported-routes works",
+                "passed": False,
+                "detail": str(e)
+            })
+        
+        # ── Check 4: Base USDC address configured ─────────────────
+        base_usdc = TOKENS.get("usdc", {}).get("8453", "")
+        if base_usdc:
+            report["checks"].append({
+                "name": "Base USDC address configured",
+                "passed": True,
+                "detail": base_usdc[:10] + "..."
+            })
+        else:
+            report["checks"].append({
+                "name": "Base USDC address configured",
+                "passed": False,
+                "detail": "Not configured"
+            })
+        
+        # ── Check 5: Arbitrum USDC address configured ─────────────
+        arb_usdc = TOKENS.get("usdc", {}).get("42161", "")
+        if arb_usdc:
+            report["checks"].append({
+                "name": "Arbitrum USDC address configured",
+                "passed": True,
+                "detail": arb_usdc[:10] + "..."
+            })
+        else:
+            report["checks"].append({
+                "name": "Arbitrum USDC address configured",
+                "passed": False,
+                "detail": "Not configured"
+            })
+        
+        # ── Check 6: route health tool reachable ──────────────────
+        try:
+            health_result = self.check_route_health("base", "arbitrum")
+            report["checks"].append({
+                "name": "route health tool reachable",
+                "passed": True,
+                "detail": "Tool responded"
+            })
+        except Exception as e:
+            report["checks"].append({
+                "name": "route health tool reachable",
+                "passed": False,
+                "detail": str(e)
+            })
+        
+        # ── Check 7: request-quote works ──────────────────────────
+        try:
+            # Try to get a quote with a small amount
+            quote_result = self.get_quote(Intent("base", "arbitrum", "usdc", "1"))
+            if "error" not in quote_result:
+                report["checks"].append({
+                    "name": "request-quote works",
+                    "passed": True,
+                    "detail": "Quote received"
+                })
+            else:
+                report["checks"].append({
+                    "name": "request-quote works",
+                    "passed": False,
+                    "detail": quote_result.get("error", "Unknown error")
+                })
+        except Exception as e:
+            report["checks"].append({
+                "name": "request-quote works",
+                "passed": False,
+                "detail": str(e)
+            })
+        
+        # ── Warnings ──────────────────────────────────────────────
+        # Warning 1: OPENAI_API_KEY not set
+        if not os.environ.get("OPENAI_API_KEY"):
+            report["warnings"].append({
+                "name": "OPENAI_API_KEY not set",
+                "detail": "Using deterministic parser"
+            })
+        
+        # Warning 2: Amount unit behavior
+        report["warnings"].append({
+            "name": "Amount unit behavior",
+            "detail": "Should be verified before real execution"
+        })
+        
+        return report
+
     def close(self):
         self.mcp.close()
 
@@ -1484,6 +1632,7 @@ def interactive():
     help_table.add_row("[cyan]compare[/cyan] 10 USDC from Ethereum", "Compare quotes across chains")
     help_table.add_row("[cyan]route health[/cyan] base arbitrum", "Check route health status")
     help_table.add_row("[cyan]solver[/cyan] base arbitrum USDC USDC", "Run solver-aware checks (health, quotes, inventory)")
+    help_table.add_row("[cyan]doctor[/cyan]", "Run diagnostic checks on MCP connection")
     help_table.add_row("[cyan]routes[/cyan]", "Show supported routes")
     help_table.add_row("[cyan]orders[/cyan]", "Show recent orders")
     help_table.add_row("[cyan]favorites[/cyan]", "Show saved routes")
@@ -1498,7 +1647,7 @@ def interactive():
     # ── Auto-completion setup ─────────────────────────────────────
     chain_names = list(CHAINS.keys())
     token_names = ["USDC", "USDT", "ETH"]
-    commands = ["send", "safe", "verdict", "compare", "route", "solver", "routes", "orders", "favorites", "wallet",
+    commands = ["send", "safe", "verdict", "compare", "route", "solver", "doctor", "routes", "orders", "favorites", "wallet",
                 "history", "stats", "quit"]
     all_completions = commands + chain_names + token_names + [
         "from", "to", "bridge", "transfer", "if", "fee", "healthy",
@@ -1632,6 +1781,29 @@ def interactive():
                     console.print(f"  [dim]... and {len(pairs)-15} more[/dim]")
             if msg:
                 console.print(f"  {msg}")
+            console.print()
+            continue
+
+        # ── Doctor command ────────────────────────────────────────
+        if text == "doctor":
+            console.print(f"\n  [bold cyan]🏥 LI.FI Intents MCP Doctor[/bold cyan]\n")
+            
+            # Run doctor checks
+            with Progress(SpinnerColumn(), TextColumn("[bold blue]Running diagnostic checks...[/bold blue]"), transient=True) as progress:
+                progress.add_task("doctor", total=None)
+                report = agent.doctor()
+            
+            # Display checks
+            for check in report["checks"]:
+                icon = "[green]✓[/green]" if check["passed"] else "[red]✗[/red]"
+                console.print(f"  {icon} {check['name']}: {check['detail']}")
+            
+            # Display warnings
+            if report["warnings"]:
+                console.print(f"\n  [bold yellow]Warnings:[/bold yellow]")
+                for warning in report["warnings"]:
+                    console.print(f"  [yellow]![/yellow] {warning['name']}: {warning['detail']}")
+            
             console.print()
             continue
 

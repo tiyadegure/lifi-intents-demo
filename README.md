@@ -7,12 +7,18 @@
 - 🛡️ **Safe Verdict** - 策略驱动的安全裁决（EXECUTABLE or REFUSED）
 - 🔍 **Decision Trace** - 逐步追踪决策过程，展示 MCP 调用细节
 - 🔧 **Solver-Aware Checks** - 路由健康、报价可用性、Solver 库存检查
+- 🏥 **Doctor 命令** - MCP 连接和配置诊断
 - 🤖 **AI 意图解析** - 自然语言 → 跨链操作 + 策略约束
 - 🔗 **MCP 协议集成** - 直接调用 LI.FI Intents
 - 📊 **Web UI Dashboard** - 报价历史、统计面板、Solver 工具
 - 💻 **CLI 交互界面** - 终端操作，开发者友好
 - 📦 **Python SDK** - `pip install lifi-agent`
 - 🛠️ **Solver Tools** - Route Health、Quote Inventory、Become a Solver
+
+## 📚 文档
+
+- **[PITFALLS.md](PITFALLS.md)** - 10 个 LI.FI Intents MCP 开发陷阱
+- **[SUBMISSION.md](SUBMISSION.md)** - 提交材料清单
 
 ## 🚀 快速开始
 
