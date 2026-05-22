@@ -10,8 +10,94 @@ import sys
 import json
 import os
 import time
+import sqlite3
 from pathlib import Path
+from datetime import datetime
 from .mcp_client import MCPClient
+
+# ── SQLite Quote Store ─────────────────────────────────────────────
+DB_FILE = Path.home() / ".lifi_agent_quotes.db"
+
+class QuoteStore:
+    """Persistent quote history using SQLite."""
+    
+    def __init__(self, db_path: Path = DB_FILE):
+        self.db_path = db_path
+        self._init_db()
+    
+    def _init_db(self):
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS quotes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                intent TEXT,
+                from_chain TEXT,
+                to_chain TEXT,
+                token TEXT,
+                input_amount TEXT,
+                output_amount TEXT,
+                fee_pct TEXT,
+                quote_id TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+        conn.close()
+    
+    def store(self, intent_repr: str, from_chain: str, to_chain: str, 
+              token: str, input_amount: str, output_amount: str, 
+              fee_pct: str, quote_id: str):
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("""
+            INSERT INTO quotes (intent, from_chain, to_chain, token, 
+                              input_amount, output_amount, fee_pct, quote_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (intent_repr, from_chain, to_chain, token, input_amount, 
+              output_amount, fee_pct, quote_id))
+        conn.commit()
+        conn.close()
+    
+    def get_recent(self, limit: int = 10) -> list[dict]:
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT * FROM quotes ORDER BY timestamp DESC LIMIT ?", (limit,)
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    
+    def get_stats(self) -> dict:
+        conn = sqlite3.connect(self.db_path)
+        total = conn.execute("SELECT COUNT(*) FROM quotes").fetchone()[0]
+        if total == 0:
+            conn.close()
+            return {"total": 0, "avg_fee": 0, "top_routes": [], "top_tokens": []}
+        
+        avg_fee = conn.execute(
+            "SELECT AVG(CAST(fee_pct AS REAL)) FROM quotes WHERE fee_pct != '999'"
+        ).fetchone()[0] or 0
+        
+        top_routes = conn.execute("""
+            SELECT from_chain, to_chain, COUNT(*) as cnt 
+            FROM quotes GROUP BY from_chain, to_chain 
+            ORDER BY cnt DESC LIMIT 5
+        """).fetchall()
+        
+        top_tokens = conn.execute("""
+            SELECT token, COUNT(*) as cnt 
+            FROM quotes GROUP BY token 
+            ORDER BY cnt DESC LIMIT 3
+        """).fetchall()
+        
+        conn.close()
+        return {
+            "total": total,
+            "avg_fee": round(avg_fee, 3),
+            "top_routes": [(r[0], r[1], r[2]) for r in top_routes],
+            "top_tokens": [(t[0], t[1]) for t in top_tokens],
+        }
+
+quote_store = QuoteStore()
 
 # ── Rich TUI ──────────────────────────────────────────────────────
 from rich.console import Console
@@ -312,6 +398,22 @@ class LifAgent:
                 "result": result,
             })
             self.quote_history = self.quote_history[-10:]
+            
+            # Store in SQLite
+            quotes = result.get("data", {}).get("quotes", [])
+            if quotes:
+                q = quotes[0]
+                output = q.get("outputAmount", "0")
+                quote_store.store(
+                    intent_repr=repr(intent),
+                    from_chain=intent.from_chain,
+                    to_chain=intent.to_chain,
+                    token=intent.token,
+                    input_amount=intent.amount,
+                    output_amount=output,
+                    fee_pct=self._calc_fee(intent.amount, output),
+                    quote_id=q.get("quoteId", "")
+                )
 
         return result
 
@@ -450,7 +552,8 @@ def interactive():
     help_table.add_row("[cyan]orders[/cyan]", "Show recent orders")
     help_table.add_row("[cyan]favorites[/cyan]", "Show saved routes")
     help_table.add_row("[cyan]wallet[/cyan]", "Show demo wallet info")
-    help_table.add_row("[cyan]history[/cyan]", "Show recent quotes")
+    help_table.add_row("[cyan]history[/cyan]", "Show recent quotes (SQLite)")
+    help_table.add_row("[cyan]stats[/cyan]", "Show quote statistics")
     help_table.add_row("[cyan]yes[/cyan] / [cyan]confirm[/cyan]", "Confirm pending order")
     help_table.add_row("[cyan]quit[/cyan]", "Exit")
     console.print(Panel(help_table, title="[bold]Commands[/bold]", border_style="dim", box=box.ROUNDED))
@@ -460,7 +563,7 @@ def interactive():
     chain_names = list(CHAINS.keys())
     token_names = ["USDC", "USDT", "ETH"]
     commands = ["send", "compare", "routes", "orders", "favorites", "wallet",
-                "history", "yes", "confirm", "quit", "exit"]
+                "history", "stats", "quit"]
     all_completions = commands + chain_names + token_names + [
         "from", "to", "bridge", "transfer",
     ]
@@ -633,22 +736,54 @@ def interactive():
             continue
 
         if text == "history":
-            recent = agent.quote_history[-5:]
+            recent = quote_store.get_recent(10)
             if recent:
-                table = Table(title="Recent Quotes", box=box.ROUNDED, border_style="dim")
+                table = Table(title="Recent Quotes (SQLite)", box=box.ROUNDED, border_style="dim")
                 table.add_column("#", style="dim", width=4)
                 table.add_column("Time", style="dim")
                 table.add_column("Route")
                 table.add_column("Output")
+                table.add_column("Fee")
                 for i, entry in enumerate(recent, 1):
-                    ts = time.strftime("%H:%M:%S", time.localtime(entry["timestamp"]))
-                    quotes = entry["result"].get("data", {}).get("quotes", [])
-                    output = quotes[0].get("outputAmount", "?") if quotes else "?"
-                    table.add_row(str(i), ts, entry["intent"], output)
+                    ts = entry.get("timestamp", "?")[:19]  # YYYY-MM-DD HH:MM:SS
+                    route = f"{entry['from_chain']}→{entry['to_chain']} ({entry['token'].upper()})"
+                    output = entry.get("output_amount", "?")
+                    fee = entry.get("fee_pct", "?")
+                    fee_str = f"{float(fee):.2f}%" if fee and fee != "999" else "?"
+                    table.add_row(str(i), ts, route, output, fee_str)
                 console.print()
                 console.print(table)
             else:
                 console.print("\n  [dim]No quote history yet.[/dim]")
+            console.print()
+            continue
+
+        if text == "stats":
+            stats = quote_store.get_stats()
+            if stats["total"] == 0:
+                console.print("\n  [dim]No quotes recorded yet.[/dim]\n")
+                continue
+            
+            table = Table(title="📊 Quote Statistics", box=box.ROUNDED, border_style="blue")
+            table.add_column("Metric", style="cyan")
+            table.add_column("Value", style="green")
+            table.add_row("Total Quotes", str(stats["total"]))
+            table.add_row("Average Fee", f"{stats['avg_fee']:.3f}%")
+            
+            if stats["top_routes"]:
+                routes_str = "\n".join(
+                    f"  {f}→{t} ({c}x)" for f, t, c in stats["top_routes"]
+                )
+                table.add_row("Top Routes", routes_str)
+            
+            if stats["top_tokens"]:
+                tokens_str = ", ".join(
+                    f"{t.upper()} ({c}x)" for t, c in stats["top_tokens"]
+                )
+                table.add_row("Top Tokens", tokens_str)
+            
+            console.print()
+            console.print(table)
             console.print()
             continue
 
