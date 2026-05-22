@@ -113,6 +113,16 @@ async def get_favorites():
     return {"favorites": agent.get_favorite_routes()}
 
 
+@app.get("/api/solvers")
+async def get_solvers():
+    ensure_connected()
+    start = time.time()
+    result = agent.get_solver_identities()
+    duration = int((time.time() - start) * 1000)
+    trace_step("get-solver-identities", {}, result, duration)
+    return result
+
+
 # ── Web UI ──────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
@@ -223,6 +233,20 @@ async def index():
   .footer{text-align:center;padding:28px 0 12px;color:var(--text-muted);font-size:12px;border-top:1px solid var(--border-subtle);margin-top:28px}
   .footer a{color:var(--accent);text-decoration:none;transition:color .15s}
   .footer a:hover{color:#a78bfa}
+  /* Stats bar */
+  .stats-bar{display:flex;align-items:center;justify-content:center;gap:24px;padding:10px 20px;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:20px;font-size:12px;color:var(--text-secondary)}
+  .stats-bar .stat{display:flex;align-items:center;gap:6px}
+  .stats-bar .stat-value{color:var(--text-primary);font-weight:600;font-variant-numeric:tabular-nums}
+  .stats-bar .stat-dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0}
+  /* Solver grid */
+  .solver-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+  .solver-card{background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);padding:14px 16px;transition:border-color .2s,background .2s;animation:fadeSlideIn .3s ease both}
+  .solver-card:hover{border-color:#2a3f6a;background:var(--bg-card-hover)}
+  .solver-card-header{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .solver-card-header .solver-status{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0;box-shadow:0 0 6px var(--green-dim)}
+  .solver-card-header .solver-name{font-size:13px;font-weight:600;color:var(--text-primary);font-family:'SF Mono',SFMono-Regular,Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .solver-chains{display:flex;flex-wrap:wrap;gap:4px}
+  .solver-chain-badge{background:var(--bg-surface);border:1px solid var(--border-subtle);color:var(--text-secondary);font-size:10px;padding:2px 8px;border-radius:10px;font-weight:500;text-transform:capitalize}
   /* Mobile */
   @media(max-width:768px){
     .container{padding:16px 14px}
@@ -239,6 +263,8 @@ async def index():
     .trace-duration{min-width:auto}
     .compare-table{font-size:13px}
     .compare-table th,.compare-table td{padding:8px 10px}
+    .solver-grid{grid-template-columns:1fr}
+    .stats-bar{flex-wrap:wrap;gap:12px;padding:8px 14px;font-size:11px}
   }
   @media(max-width:420px){
     header h1{font-size:20px}
@@ -252,6 +278,12 @@ async def index():
     <h1>LI.FI Intents × AI Agent</h1>
     <p>Cross-chain operations via natural language · Powered by MCP Protocol</p>
   </header>
+
+  <div class="stats-bar" id="statsBar">
+    <div class="stat"><span class="stat-dot"></span> Routes: <span class="stat-value" id="statRoutes">—</span></div>
+    <div class="stat"><span class="stat-dot"></span> Active Solvers: <span class="stat-value" id="statSolvers">—</span></div>
+    <div class="stat">Last Quote: <span class="stat-value" id="statLastQuote">—</span></div>
+  </div>
 
   <div class="input-row">
     <input type="text" id="intentInput" placeholder="send 10 USDC from Base to Arbitrum" spellcheck="false" autocomplete="off" />
@@ -282,6 +314,14 @@ async def index():
     <div id="compareResult">
       <p class="empty-state">Click "Compare" to see quotes across multiple destination chains.</p>
     </div>
+  </div>
+
+  <div class="panel" style="margin-top:20px">
+    <h3>Solver Network <span class="badge" id="solverBadge">0 solvers</span></h3>
+    <div id="solverResult">
+      <p class="empty-state">Loading solver identities…</p>
+    </div>
+    <button class="btn btn-secondary" style="margin-top:14px" onclick="refreshSolvers()">Refresh Solvers</button>
   </div>
 
   <div class="panel how-it-works">
@@ -351,6 +391,7 @@ async function submitIntent() {
     const data = await res.json();
     renderQuote(data, intent);
     refreshTraces();
+    document.getElementById('statLastQuote').textContent = new Date().toLocaleTimeString();
   } catch (e) {
     setStatus('Request failed: ' + e.message, 'err');
   }
@@ -473,14 +514,77 @@ document.getElementById('intentInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') submitIntent();
 });
 
+function truncateAddr(addr) {
+  if (!addr || addr.length < 12) return addr || '?';
+  return addr.slice(0, 6) + '…' + addr.slice(-4);
+}
+
+function renderSolvers(data) {
+  const el = document.getElementById('solverResult');
+  const badge = document.getElementById('solverBadge');
+  const solvers = data?.data?.solvers || data?.solvers || [];
+  if (!solvers.length && !data?.data?.solverIdentities) {
+    el.innerHTML = '<p class="empty-state">No solver data available. The endpoint may require an API key.</p>';
+    badge.textContent = '0 solvers';
+    document.getElementById('statSolvers').textContent = '0';
+    return;
+  }
+  const identities = data?.data?.solverIdentities || solvers;
+  const count = identities.length;
+  badge.textContent = count + ' solver' + (count !== 1 ? 's' : '');
+  document.getElementById('statSolvers').textContent = count;
+  let html = '<div class="solver-grid">';
+  identities.forEach((s, i) => {
+    const name = s.solverName || s.name || truncateAddr(s.address || s.solverAddress || '');
+    const addr = s.address || s.solverAddress || '';
+    const chains = s.supportedChains || s.chains || [];
+    const chainBadges = chains.map(c => '<span class="solver-chain-badge">' + c + '</span>').join('');
+    const delay = (i * 0.06).toFixed(2);
+    html += '<div class="solver-card" style="animation-delay:' + delay + 's">' +
+      '<div class="solver-card-header">' +
+        '<span class="solver-status"></span>' +
+        '<span class="solver-name" title="' + (addr || name) + '">' + name + '</span>' +
+      '</div>' +
+      '<div class="solver-chains">' + (chainBadges || '<span class="solver-chain-badge">unknown</span>') + '</div>' +
+    '</div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+async function refreshSolvers() {
+  const el = document.getElementById('solverResult');
+  el.innerHTML = '<div class="skeleton w60"></div><div class="skeleton w80"></div>';
+  try {
+    const res = await fetch('/api/solvers');
+    const data = await res.json();
+    renderSolvers(data);
+  } catch (e) {
+    el.innerHTML = '<p class="empty-state" style="color:var(--red)">Failed to load solvers: ' + e.message + '</p>';
+  }
+}
+
+async function loadStats() {
+  try {
+    const res = await fetch('/api/routes');
+    const data = await res.json();
+    const count = data.data?.count || 0;
+    document.getElementById('statRoutes').textContent = count;
+  } catch (e) {}
+}
+
 // Load routes on startup
 fetch('/api/routes').then(r => r.json()).then(d => {
   const count = d.data?.count || 0;
   if (count > 0) {
     setStatus('Connected to LI.FI Intents MCP · ' + count + ' routes available', 'ok');
+    document.getElementById('statRoutes').textContent = count;
     setTimeout(() => setStatus('', ''), 3000);
   }
 }).catch(() => {});
+
+// Load solvers and stats on startup
+refreshSolvers();
 </script>
 </body>
 </html>"""
