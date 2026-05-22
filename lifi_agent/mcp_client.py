@@ -7,6 +7,7 @@ Supports both sync and async interfaces with parallel call capability.
 import asyncio
 import httpx
 import json
+import os
 import time
 import logging
 import threading
@@ -185,8 +186,58 @@ class MCPClient:
 
         return self._parse_server_info(r.text)
 
+    def _demo_call(self, tool: str, args: dict = None) -> dict:
+        """Return mock data for demo mode. Set LIFI_AGENT_DEMO_MODE=1 to activate."""
+        args = args or {}
+
+        if tool == "get-supported-routes":
+            return {"data": {"routes": [
+                {"fromChainId": 8453, "toChainId": 42161,
+                 "fromToken": {"address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}},
+                {"fromChainId": 1, "toChainId": 10,
+                 "fromToken": {"address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"}},
+                {"fromChainId": 42161, "toChainId": 8453,
+                 "fromToken": {"address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"}},
+            ]}}
+
+        if tool == "check-route-health":
+            return {"data": {"healthy": True, "status": "healthy", "latencyMs": 120, "activeSolvers": 3}}
+
+        if tool == "request-quote":
+            # Simulate ~0.2% fee
+            from_amount = args.get("amount", "10000000")
+            try:
+                out = int(int(from_amount) * 0.998)
+            except (ValueError, TypeError):
+                out = 9980000
+            return {"data": {"quotes": [{"inputAmount": str(from_amount), "outputAmount": str(out), "quoteId": "demo-quote-001"}]}}
+
+        if tool == "get-solver-identities":
+            return {"data": {"solverIdentities": [
+                {"id": "solver-1", "name": "Demo Solver A"},
+                {"id": "solver-2", "name": "Demo Solver B"},
+            ]}}
+
+        if tool == "get-quote-inventory":
+            return {"data": {"quotes": [{"solver": "demo-solver", "inputAmount": "10000000", "outputAmount": "9980000"}]}}
+
+        if tool == "prepare-order":
+            return {"data": {"orderId": "demo-order-001", "status": "pending"}}
+
+        if tool == "track-order":
+            return {"data": {"id": args.get("orderId", "demo-order-001"), "status": "completed"}}
+
+        if tool == "list-orders":
+            return {"data": {"orders": [{"id": "demo-order-001", "status": "completed", "createdAt": "2026-05-22T10:00:00Z"}]}}
+
+        return {"data": {"message": f"Demo mode: no mock for {tool}"}}
+
     def call(self, tool: str, args: dict = None, use_cache: bool = True, retries: int = 2) -> dict:
         """Call an MCP tool (sync) with rate limiting, connection pooling, caching, and retry."""
+        # Demo mode: return mock data without hitting real MCP
+        if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1":
+            return self._demo_call(tool, args)
+
         self._cleanup_cache()
         cache_key = f"{tool}:{json.dumps(args or {}, sort_keys=True)}"
 
