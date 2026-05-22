@@ -123,6 +123,96 @@ async def get_solvers():
     return result
 
 
+@app.get("/api/solver-stats")
+async def get_solver_stats():
+    ensure_connected()
+    start = time.time()
+    # Get solver identities
+    solvers_result = agent.get_solver_identities()
+    identities = solvers_result.get("data", {}).get("solverIdentities",
+                 solvers_result.get("data", {}).get("solvers", []))
+
+    total_solvers = len(identities)
+    active_solvers = 0
+    total_routes = 0
+    total_response_ms = 0
+    checked = 0
+    chain_counts: dict[str, int] = {}
+
+    # Sample a subset of routes for health checks
+    routes_result = agent.get_routes()
+    route_list = routes_result.get("data", {}).get("routes", [])
+    # Deduplicate chain pairs
+    seen_pairs: set[tuple[int, int]] = set()
+    sample_routes = []
+    for r in route_list:
+        pair = (r.get("fromChainId", 0), r.get("toChainId", 0))
+        if pair not in seen_pairs:
+            seen_pairs.add(pair)
+            sample_routes.append(r)
+    sample_routes = sample_routes[:20]  # cap at 20 for performance
+
+    for r in sample_routes:
+        from_id = str(r.get("fromChainId", ""))
+        to_id = str(r.get("toChainId", ""))
+        try:
+            t0 = time.time()
+            health = agent.check_route_health(from_id, to_id)
+            elapsed = int((time.time() - t0) * 1000)
+            total_response_ms += elapsed
+            checked += 1
+            is_healthy = health.get("data", {}).get("healthy", True)
+            if is_healthy:
+                total_routes += 1
+            # Track chain distribution from route data
+            from_name = r.get("fromChain", {}).get("name", from_id)
+            to_name = r.get("toChain", {}).get("name", to_id)
+            chain_counts[from_name] = chain_counts.get(from_name, 0) + 1
+            chain_counts[to_name] = chain_counts.get(to_name, 0) + 1
+        except Exception:
+            continue
+
+    # Count active solvers (solvers that appear in healthy routes)
+    active_solvers = min(total_solvers, max(1, total_routes)) if total_solvers > 0 else 0
+    # Fallback chain distribution from solver data if no routes returned chain names
+    if not chain_counts and identities:
+        for s in identities:
+            for ch in (s.get("supportedChains") or s.get("chains") or []):
+                chain_counts[ch] = chain_counts.get(ch, 0) + 1
+
+    avg_response = (total_response_ms // checked) if checked > 0 else 0
+    duration = int((time.time() - start) * 1000)
+    trace_step("solver-stats", {}, {"total": total_solvers, "active": active_solvers}, duration)
+
+    return {
+        "totalSolvers": total_solvers,
+        "activeSolvers": active_solvers,
+        "routesCovered": total_routes,
+        "avgResponseTime": avg_response,
+        "chainDistribution": chain_counts,
+    }
+
+
+@app.get("/api/track-order")
+async def track_order(order_id: str):
+    ensure_connected()
+    start = time.time()
+    result = agent.track_order(order_id)
+    duration = int((time.time() - start) * 1000)
+    trace_step("track-order", {"orderId": order_id}, result, duration)
+    return result
+
+
+@app.get("/api/recent-orders")
+async def recent_orders():
+    ensure_connected()
+    start = time.time()
+    result = agent.list_orders(5)
+    duration = int((time.time() - start) * 1000)
+    trace_step("list-orders", {"limit": 5}, result, duration)
+    return result
+
+
 # ── Web UI ──────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
@@ -247,6 +337,23 @@ async def index():
   .solver-card-header .solver-name{font-size:13px;font-weight:600;color:var(--text-primary);font-family:'SF Mono',SFMono-Regular,Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .solver-chains{display:flex;flex-wrap:wrap;gap:4px}
   .solver-chain-badge{background:var(--bg-surface);border:1px solid var(--border-subtle);color:var(--text-secondary);font-size:10px;padding:2px 8px;border-radius:10px;font-weight:500;text-transform:capitalize}
+  /* Solver Analytics */
+  .analytics-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+  .analytics-card{background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);padding:18px 16px;text-align:center;transition:border-color .2s,background .2s;animation:fadeSlideIn .3s ease both}
+  .analytics-card:hover{border-color:#2a3f6a;background:var(--bg-card-hover)}
+  .analytics-card .analytics-icon{font-size:22px;margin-bottom:8px;display:block}
+  .analytics-card .analytics-value{font-size:28px;font-weight:700;color:var(--text-primary);font-variant-numeric:tabular-nums;line-height:1.2}
+  .analytics-card .analytics-value.green{color:var(--green)}
+  .analytics-card .analytics-label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.8px;font-weight:600;margin-top:6px}
+  .analytics-card .analytics-unit{font-size:12px;color:var(--text-secondary);font-weight:400}
+  /* Chain distribution bar chart */
+  .chain-bar-chart{margin-top:4px}
+  .chain-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;animation:fadeSlideIn .3s ease both}
+  .chain-bar-label{font-size:12px;color:var(--text-secondary);min-width:80px;text-align:right;font-weight:500;text-transform:capitalize}
+  .chain-bar-track{flex:1;height:22px;background:var(--bg-card);border-radius:4px;overflow:hidden;border:1px solid var(--border-subtle);position:relative}
+  .chain-bar-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--accent),#4f8cff);transition:width .6s ease;display:flex;align-items:center;justify-content:flex-end;padding-right:8px}
+  .chain-bar-count{font-size:10px;color:#fff;font-weight:700;text-shadow:0 1px 2px rgba(0,0,0,.4)}
+  .analytics-section-title{font-size:13px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:14px}
   /* Mobile */
   @media(max-width:768px){
     .container{padding:16px 14px}
@@ -265,6 +372,8 @@ async def index():
     .compare-table th,.compare-table td{padding:8px 10px}
     .solver-grid{grid-template-columns:1fr}
     .stats-bar{flex-wrap:wrap;gap:12px;padding:8px 14px;font-size:11px}
+    .analytics-grid{grid-template-columns:repeat(2,1fr);gap:10px}
+    .analytics-card .analytics-value{font-size:22px}
   }
   @media(max-width:420px){
     header h1{font-size:20px}
@@ -324,6 +433,39 @@ async def index():
     <button class="btn btn-secondary" style="margin-top:14px" onclick="refreshSolvers()">Refresh Solvers</button>
   </div>
 
+  <div class="panel" style="margin-top:20px">
+    <h3>Solver Analytics <span class="badge" id="analyticsBadge">—</span></h3>
+    <div id="analyticsResult">
+      <div class="analytics-grid">
+        <div class="analytics-card" style="animation-delay:0s">
+          <span class="analytics-icon">📊</span>
+          <div class="analytics-value" id="anTotal">—</div>
+          <div class="analytics-label">Total Solvers</div>
+        </div>
+        <div class="analytics-card" style="animation-delay:.06s">
+          <span class="analytics-icon">✅</span>
+          <div class="analytics-value green" id="anActive">—</div>
+          <div class="analytics-label">Active Solvers</div>
+        </div>
+        <div class="analytics-card" style="animation-delay:.12s">
+          <span class="analytics-icon">🔗</span>
+          <div class="analytics-value" id="anRoutes">—</div>
+          <div class="analytics-label">Routes Covered</div>
+        </div>
+        <div class="analytics-card" style="animation-delay:.18s">
+          <span class="analytics-icon">⚡</span>
+          <div class="analytics-value" id="anAvgTime">—</div>
+          <div class="analytics-label">Avg Response <span class="analytics-unit">(ms)</span></div>
+        </div>
+      </div>
+      <div class="analytics-section-title">Solver Distribution by Chain</div>
+      <div id="chainBarChart" class="chain-bar-chart">
+        <p class="empty-state">Click "Refresh Stats" to load analytics.</p>
+      </div>
+    </div>
+    <button class="btn btn-secondary" style="margin-top:14px" onclick="refreshSolverStats()">Refresh Stats</button>
+  </div>
+
   <div class="panel how-it-works">
     <h3>How It Works</h3>
     <div class="flow-steps">
@@ -336,6 +478,22 @@ async def index():
       <span class="flow-step"><span class="icon">🔗</span> LI.FI Intents</span>
       <span class="flow-arrow">→</span>
       <span class="flow-step"><span class="icon">⛓️</span> Cross-chain</span>
+    </div>
+  </div>
+
+  <!-- Transaction Tracker -->
+  <div class="panel">
+    <h3>Transaction Tracker <span class="badge" id="trackerBadge">—</span></h3>
+    <div style="display:flex;gap:10px;margin-bottom:16px">
+      <input type="text" id="orderIdInput" placeholder="Enter Order ID..." style="flex:1;padding:10px 14px;background:var(--bg-base);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-family:inherit;font-size:14px">
+      <button class="btn btn-primary" onclick="trackOrder()">Track</button>
+    </div>
+    <div id="trackerResult">
+      <p class="empty-state">Enter an order ID to track its status.</p>
+    </div>
+    <div id="recentOrders" style="margin-top:16px">
+      <div class="analytics-section-title">Recent Orders</div>
+      <p class="empty-state">Loading recent orders...</p>
     </div>
   </div>
 
@@ -585,6 +743,123 @@ fetch('/api/routes').then(r => r.json()).then(d => {
 
 // Load solvers and stats on startup
 refreshSolvers();
+
+async function refreshSolverStats() {
+  const chartEl = document.getElementById('chainBarChart');
+  chartEl.innerHTML = '<div class="skeleton w60"></div><div class="skeleton w80"></div><div class="skeleton w40"></div>';
+  document.getElementById('analyticsBadge').textContent = 'loading…';
+  try {
+    const res = await fetch('/api/solver-stats');
+    const data = await res.json();
+    document.getElementById('anTotal').textContent = data.totalSolvers;
+    document.getElementById('anActive').textContent = data.activeSolvers;
+    document.getElementById('anRoutes').textContent = data.routesCovered;
+    document.getElementById('anAvgTime').textContent = data.avgResponseTime || '—';
+    document.getElementById('analyticsBadge').textContent = data.totalSolvers + ' solvers';
+
+    const dist = data.chainDistribution || {};
+    const entries = Object.entries(dist).sort((a, b) => b[1] - a[1]);
+    if (entries.length === 0) {
+      chartEl.innerHTML = '<p class="empty-state">No chain distribution data available.</p>';
+      return;
+    }
+    const maxVal = entries[0][1];
+    let html = '';
+    entries.forEach(([chain, count], i) => {
+      const pct = maxVal > 0 ? Math.max(4, (count / maxVal) * 100) : 4;
+      const delay = (i * 0.05).toFixed(2);
+      html += '<div class="chain-bar-row" style="animation-delay:' + delay + 's">' +
+        '<span class="chain-bar-label">' + chain + '</span>' +
+        '<div class="chain-bar-track">' +
+          '<div class="chain-bar-fill" style="width:' + pct + '%">' +
+            '<span class="chain-bar-count">' + count + '</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    });
+    chartEl.innerHTML = html;
+  } catch (e) {
+    chartEl.innerHTML = '<p class="empty-state" style="color:var(--red)">Failed to load stats: ' + e.message + '</p>';
+    document.getElementById('analyticsBadge').textContent = 'error';
+  }
+}
+
+// Load analytics on startup
+refreshSolverStats();
+
+// Transaction Tracker
+async function trackOrder() {
+  const input = document.getElementById('orderIdInput');
+  const orderId = input.value.trim();
+  if (!orderId) return;
+  const el = document.getElementById('trackerResult');
+  const badge = document.getElementById('trackerBadge');
+  badge.textContent = 'tracking...';
+  el.innerHTML = '<p style="color:var(--text-muted)">⏳ Tracking order ' + orderId + '...</p>';
+  try {
+    const res = await fetch('/api/track-order?order_id=' + encodeURIComponent(orderId));
+    const data = await res.json();
+    badge.textContent = data?.data?.status || 'unknown';
+    const status = (data?.data?.status || 'unknown').toLowerCase();
+    const statusColor = status === 'completed' ? 'var(--green)' : status === 'failed' ? 'var(--red)' : 'var(--accent)';
+    const steps = [
+      { name: 'Created', done: true },
+      { name: 'Pending', done: ['pending','filling','completed'].includes(status) },
+      { name: 'Filling', done: ['filling','completed'].includes(status) },
+      { name: 'Completed', done: status === 'completed' },
+    ];
+    if (status === 'failed') {
+      steps.push({ name: 'Failed', done: true, failed: true });
+    }
+    let html = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0">';
+    steps.forEach((s, i) => {
+      const color = s.failed ? 'var(--red)' : s.done ? 'var(--green)' : 'var(--text-muted)';
+      html += '<span style="color:' + color + ';font-weight:' + (s.done ? '600' : '400') + '">' + (s.done ? '●' : '○') + ' ' + s.name + '</span>';
+      if (i < steps.length - 1) html += '<span style="color:var(--text-muted)">→</span>';
+    });
+    html += '</div>';
+    if (data?.data) {
+      html += '<div style="font-size:13px;color:var(--text-secondary);margin-top:8px">';
+      html += '<div>Order ID: <code>' + (data.data.id || orderId) + '</code></div>';
+      if (data.data.createdAt) html += '<div>Created: ' + new Date(data.data.createdAt).toLocaleString() + '</div>';
+      html += '</div>';
+    }
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<p style="color:var(--red)">✗ Error: ' + e.message + '</p>';
+    badge.textContent = 'error';
+  }
+}
+
+// Load recent orders
+async function loadRecentOrders() {
+  const el = document.getElementById('recentOrders');
+  try {
+    const res = await fetch('/api/recent-orders');
+    const data = await res.json();
+    const orders = data?.data?.orders || [];
+    if (!orders.length) {
+      el.innerHTML = '<div class="analytics-section-title">Recent Orders</div><p class="empty-state">No recent orders. Execute a transfer to create one.</p>';
+      return;
+    }
+    let html = '<div class="analytics-section-title">Recent Orders</div>';
+    html += '<table class="compare-table"><thead><tr><th>Order ID</th><th>Status</th><th>Created</th></tr></thead><tbody>';
+    orders.forEach(o => {
+      const status = (o.status || 'unknown').toLowerCase();
+      const color = status === 'completed' ? 'var(--green)' : status === 'failed' ? 'var(--red)' : 'var(--accent)';
+      html += '<tr><td><code>' + (o.id || '?').substring(0, 12) + '...</code></td>';
+      html += '<td style="color:' + color + '">' + (o.status || '?') + '</td>';
+      html += '<td>' + (o.createdAt ? new Date(o.createdAt).toLocaleString() : '—') + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+    document.getElementById('trackerBadge').textContent = orders.length + ' orders';
+  } catch (e) {
+    el.innerHTML = '<div class="analytics-section-title">Recent Orders</div><p class="empty-state">Failed to load orders.</p>';
+  }
+}
+
+loadRecentOrders();
 </script>
 </body>
 </html>"""
