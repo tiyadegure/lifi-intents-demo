@@ -9,12 +9,54 @@ LI.FI Intents × AI Agent: Safe Verdict — 策略驱动的跨链安全裁决
 ## 项目亮点
 1. **Safe Verdict 引擎** - 策略驱动的安全裁决，不是简单报价
 2. **Decision Trace** - 逐步追踪决策过程，展示 MCP 调用细节
-3. **AI 意图解析** - 自然语言 → 跨链操作 + 策略约束
-4. **MCP 协议集成** - 直接调用 LI.FI Intents
-5. **完整工具链** - Web UI + CLI + SDK
-6. **Solver 生态** - Route Health、Quote Inventory、Become a Solver
+3. **Solver-Aware Checks** - 路由健康、报价可用性、Solver 库存检查
+4. **AI 意图解析** - 自然语言 → 跨链操作 + 策略约束
+5. **MCP 协议集成** - 直接调用 LI.FI Intents
+6. **完整工具链** - Web UI + CLI + SDK
+7. **Solver 生态** - Route Health、Quote Inventory、Become a Solver
 
-## 核心功能：Safe Verdict + Decision Trace
+## 核心功能：Solver-Aware Checks
+```
+命令: solver base arbitrum USDC USDC
+
+输出:
+  Route: base → arbitrum
+
+  Checks:
+    ✗ Route Health: UNKNOWN
+    ✓ Quote Availability: AVAILABLE
+    ✗ Solver Inventory: EMPTY
+      quote_count: 0
+      quotes: []
+
+  Summary:
+    Total checks: 3
+    Passed: 1
+    Failed: 2
+    Overall: DEGRADED
+```
+
+## Solver-Aware Checks 数据结构
+```python
+@dataclass
+class SolverCheck:
+    name: str           # "Route Health", "Quote Availability", "Solver Inventory"
+    status: str         # "healthy", "active", "available", "empty", "error"
+    details: Dict       # detailed information
+    passed: bool        # whether check passed
+
+@dataclass
+class SolverReport:
+    route: str          # "base → arbitrum"
+    checks: List[SolverCheck]  # list of checks
+    summary: Dict       # total_checks, passed_checks, failed_checks, overall_status
+```
+
+## 支持的 Solver 命令
+- **solver base arbitrum**: 检查路由健康和报价可用性
+- **solver base arbitrum USDC USDC**: 包含 Solver 库存检查
+- **route health base arbitrum**: 单独检查路由健康
+- **solver-check**: 别名命令
 ```
 用户输入: "send 10 USDC from Base to Arbitrum only if fee < 0.5% avoid Ethereum"
 

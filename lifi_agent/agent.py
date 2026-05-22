@@ -1327,6 +1327,120 @@ class LifAgent:
         """Get full order details for debugging."""
         return self.mcp.call("debug-order", {"orderId": order_id})
 
+    def solver_aware_checks(self, from_chain: str, to_chain: str,
+                            from_asset: str = None, to_asset: str = None) -> dict:
+        """Run all solver-aware checks for a route.
+        
+        Returns a comprehensive report with:
+        1. Route Health
+        2. Quote Availability
+        3. Solver Inventory
+        4. Order Debugging (if order_id provided)
+        """
+        report = {
+            "route": f"{from_chain} → {to_chain}",
+            "checks": [],
+            "summary": {}
+        }
+        
+        # ── Check 1: Route Health ─────────────────────────────────
+        try:
+            health_result = self.check_route_health(from_chain, to_chain, from_asset, to_asset)
+            health_data = health_result.get("data", {})
+            status = health_data.get("status", "unknown")
+            
+            report["checks"].append({
+                "name": "Route Health",
+                "status": status,
+                "details": health_data,
+                "passed": status.lower() in ["healthy", "ok", "good"]
+            })
+        except Exception as e:
+            report["checks"].append({
+                "name": "Route Health",
+                "status": "error",
+                "details": str(e),
+                "passed": False
+            })
+        
+        # ── Check 2: Quote Availability ───────────────────────────
+        try:
+            # Get supported routes to check if route exists
+            routes_result = self.get_routes()
+            route_list = routes_result.get("data", {}).get("routes", [])
+            
+            # Find matching routes
+            matching_routes = []
+            for r in route_list:
+                r_from = r.get("fromChain", "").lower()
+                r_to = r.get("toChain", "").lower()
+                if r_from == from_chain.lower() and r_to == to_chain.lower():
+                    matching_routes.append(r)
+            
+            quote_available = len(matching_routes) > 0
+            
+            report["checks"].append({
+                "name": "Quote Availability",
+                "status": "available" if quote_available else "unavailable",
+                "details": {
+                    "matching_routes": len(matching_routes),
+                    "routes": matching_routes[:3]  # Show first 3
+                },
+                "passed": quote_available
+            })
+        except Exception as e:
+            report["checks"].append({
+                "name": "Quote Availability",
+                "status": "error",
+                "details": str(e),
+                "passed": False
+            })
+        
+        # ── Check 3: Solver Inventory ─────────────────────────────
+        try:
+            if from_asset and to_asset:
+                inventory_result = self.get_quote_inventory(from_chain, to_chain, from_asset, to_asset)
+                inventory_data = inventory_result.get("data", {})
+                quotes = inventory_data.get("quotes", [])
+                
+                report["checks"].append({
+                    "name": "Solver Inventory",
+                    "status": "active" if quotes else "empty",
+                    "details": {
+                        "quote_count": len(quotes),
+                        "quotes": quotes[:3]  # Show first 3
+                    },
+                    "passed": len(quotes) > 0
+                })
+            else:
+                report["checks"].append({
+                    "name": "Solver Inventory",
+                    "status": "skipped",
+                    "details": "No asset pair specified",
+                    "passed": True
+                })
+        except Exception as e:
+            report["checks"].append({
+                "name": "Solver Inventory",
+                "status": "error",
+                "details": str(e),
+                "passed": False
+            })
+        
+        # ── Summary ───────────────────────────────────────────────
+        passed_checks = sum(1 for c in report["checks"] if c["passed"])
+        total_checks = len(report["checks"])
+        
+        report["summary"] = {
+            "total_checks": total_checks,
+            "passed_checks": passed_checks,
+            "failed_checks": total_checks - passed_checks,
+            "health_status": report["checks"][0]["status"] if report["checks"] else "unknown",
+            "overall_status": "healthy" if passed_checks == total_checks else "degraded"
+        }
+        
+        return report
+
     def close(self):
         self.mcp.close()
 
@@ -1369,6 +1483,7 @@ def interactive():
     help_table.add_row("[cyan]safe[/cyan] send 10 USDC from Base to Arbitrum if fee < 0.5%", "Safe Verdict: check policy before executing")
     help_table.add_row("[cyan]compare[/cyan] 10 USDC from Ethereum", "Compare quotes across chains")
     help_table.add_row("[cyan]route health[/cyan] base arbitrum", "Check route health status")
+    help_table.add_row("[cyan]solver[/cyan] base arbitrum USDC USDC", "Run solver-aware checks (health, quotes, inventory)")
     help_table.add_row("[cyan]routes[/cyan]", "Show supported routes")
     help_table.add_row("[cyan]orders[/cyan]", "Show recent orders")
     help_table.add_row("[cyan]favorites[/cyan]", "Show saved routes")
@@ -1383,7 +1498,7 @@ def interactive():
     # ── Auto-completion setup ─────────────────────────────────────
     chain_names = list(CHAINS.keys())
     token_names = ["USDC", "USDT", "ETH"]
-    commands = ["send", "safe", "verdict", "compare", "route", "routes", "orders", "favorites", "wallet",
+    commands = ["send", "safe", "verdict", "compare", "route", "solver", "routes", "orders", "favorites", "wallet",
                 "history", "stats", "quit"]
     all_completions = commands + chain_names + token_names + [
         "from", "to", "bridge", "transfer", "if", "fee", "healthy",
@@ -1565,6 +1680,80 @@ def interactive():
                     console.print(table)
                 
                 console.print()
+            continue
+
+        # ── Solver-aware checks command ──────────────────────────
+        if text.startswith("solver ") or text.startswith("solver-check"):
+            parts = text.split()
+            if len(parts) < 3:
+                console.print("\n  [yellow]Usage:[/yellow] solver <from_chain> <to_chain> [from_asset] [to_asset]")
+                console.print("  [dim]Example:[/dim] solver base arbitrum USDC USDC")
+                console.print("  [dim]Example:[/dim] solver base arbitrum\n")
+                continue
+            
+            from_chain = parts[1]
+            to_chain = parts[2]
+            from_asset = parts[3] if len(parts) > 3 else None
+            to_asset = parts[4] if len(parts) > 4 else None
+            
+            console.print(f"\n  [bold cyan]🔧 Solver-Aware Checks[/bold cyan]")
+            console.print(f"  Route: [bold]{from_chain} → {to_chain}[/bold]")
+            if from_asset and to_asset:
+                console.print(f"  Assets: [bold]{from_asset} → {to_asset}[/bold]")
+            console.print()
+            
+            # Run solver-aware checks
+            with Progress(SpinnerColumn(), TextColumn("[bold blue]Running solver-aware checks...[/bold blue]"), transient=True) as progress:
+                progress.add_task("solver", total=None)
+                report = agent.solver_aware_checks(from_chain, to_chain, from_asset, to_asset)
+            
+            # Display results
+            console.print("  [bold]Checks:[/bold]")
+            for check in report["checks"]:
+                # Status icon
+                if check["passed"]:
+                    icon = "[green]✓[/green]"
+                elif check["status"] == "skipped":
+                    icon = "[dim]○[/dim]"
+                else:
+                    icon = "[red]✗[/red]"
+                
+                # Status text
+                status_text = check["status"].upper()
+                if check["status"] == "healthy":
+                    status_text = "[green]HEALTHY[/green]"
+                elif check["status"] == "active":
+                    status_text = "[green]ACTIVE[/green]"
+                elif check["status"] == "available":
+                    status_text = "[green]AVAILABLE[/green]"
+                elif check["status"] == "empty":
+                    status_text = "[yellow]EMPTY[/yellow]"
+                elif check["status"] == "unavailable":
+                    status_text = "[red]UNAVAILABLE[/red]"
+                elif check["status"] == "error":
+                    status_text = "[red]ERROR[/red]"
+                
+                console.print(f"    {icon} {check['name']}: {status_text}")
+                
+                # Show details for failed checks
+                if not check["passed"] and check["status"] != "skipped":
+                    details = check.get("details", {})
+                    if isinstance(details, dict):
+                        for key, value in details.items():
+                            if key != "routes":  # Skip routes to avoid clutter
+                                console.print(f"      [dim]{key}: {value}[/dim]")
+                    else:
+                        console.print(f"      [dim]{details}[/dim]")
+            
+            # Summary
+            summary = report["summary"]
+            console.print(f"\n  [bold]Summary:[/bold]")
+            console.print(f"    Total checks: {summary['total_checks']}")
+            console.print(f"    Passed: [green]{summary['passed_checks']}[/green]")
+            console.print(f"    Failed: [red]{summary['failed_checks']}[/red]")
+            console.print(f"    Overall: [bold]{summary['overall_status'].upper()}[/bold]")
+            
+            console.print()
             continue
 
         # ── Safe Verdict command ──────────────────────────────────

@@ -6,6 +6,7 @@
 
 - 🛡️ **Safe Verdict** - 策略驱动的安全裁决（EXECUTABLE or REFUSED）
 - 🔍 **Decision Trace** - 逐步追踪决策过程，展示 MCP 调用细节
+- 🔧 **Solver-Aware Checks** - 路由健康、报价可用性、Solver 库存检查
 - 🤖 **AI 意图解析** - 自然语言 → 跨链操作 + 策略约束
 - 🔗 **MCP 协议集成** - 直接调用 LI.FI Intents
 - 📊 **Web UI Dashboard** - 报价历史、统计面板、Solver 工具
@@ -41,6 +42,11 @@ python -m lifi_agent
 > safe send 10 USDC from Base to Arbitrum if fee < 0.5%
 > safe send 10 USDC from Base to Arbitrum if fee < 0.1% and route is healthy
 > safe send 10 USDC from Base to Arbitrum avoid Ethereum prefer cheapest route
+
+# Solver-aware checks
+> solver base arbitrum USDC USDC
+> solver base arbitrum
+> solver ethereum polygon
 
 # 普通命令
 > send 10 USDC from Base to Arbitrum
