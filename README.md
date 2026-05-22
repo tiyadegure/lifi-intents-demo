@@ -1,127 +1,129 @@
-# LI.FI Intents × AI Agent
+# LI.FI Intents Developer Playground
 
-一个基于 LI.FI Intents MCP 协议的 AI Agent，用自然语言就能跨链转账。
+A solver-aware technical demo for [LI.FI Intents MCP](https://docs.li.fi/lifi-intents/introduction).
 
-## ✨ 功能亮点
+It turns natural language like:
 
-- 🛡️ **Safe Verdict** - 策略驱动的安全裁决（EXECUTABLE or REFUSED）
-- 🔍 **Decision Trace** - 逐步追踪决策过程，展示 MCP 调用细节
-- 🔧 **Solver-Aware Checks** - 路由健康、报价可用性、Solver 库存检查
-- 🏥 **Doctor 命令** - MCP 连接和配置诊断
-- 🤖 **AI 意图解析** - 自然语言 → 跨链操作 + 策略约束
-- 🔗 **MCP 协议集成** - 直接调用 LI.FI Intents
-- 📊 **Web UI Dashboard** - 报价历史、统计面板、Solver 工具
-- 💻 **CLI 交互界面** - 终端操作，开发者友好
-- 📦 **Python SDK** - `pip install lifi-agent`
-- 🛠️ **Solver Tools** - Route Health、Quote Inventory、Become a Solver
+> "send 10 USDC from Base to Arbitrum only if fee < 0.5%"
 
-## 📚 文档
+into:
 
-- **[PITFALLS.md](PITFALLS.md)** - 10 个 LI.FI Intents MCP 开发陷阱
-- **[SUBMISSION.md](SUBMISSION.md)** - 提交材料清单
+1. **Structured intent** — amount, token, chains
+2. **Policy constraints** — max fee, min output, route health
+3. **LI.FI MCP quote request** — real-time solver quotes
+4. **Route health / solver checks** — availability, latency
+5. **Visible decision trace** — every step logged with timing
+6. **EXECUTABLE or REFUSED verdict** — policy-driven decision
 
-## 🚀 快速开始
+**Live demo → [lifi.degure.me](http://lifi.degure.me)**
 
-### 安装
+---
+
+## How it works
+
+```
+Natural language input
+  → Intent parser (regex or LLM)
+    → Policy extractor ("only if fee < 0.5%")
+      → MCP tool call (get-supported-routes, request-quote)
+        → Solver-aware checks (route health, quote availability)
+          → Safe Verdict (EXECUTABLE / REFUSED)
+```
+
+The parser uses a **deterministic regex engine** by default, with optional LLM fallback (OpenAI-compatible API). This means it works offline, with zero API keys, and produces consistent structured output every time.
+
+---
+
+## Features
+
+- **Safe Verdict** — policy-driven decision engine with EXECUTABLE / REFUSED output
+- **Decision Trace** — step-by-step audit log with MCP tool names and timing
+- **Solver-Aware Checks** — route health, quote availability, solver inventory
+- **Doctor** — `python -m lifi_agent doctor` to diagnose MCP connectivity
+- **CLI** — interactive terminal with tab completion, rich formatting
+- **Web UI** — three-column layout: Intent → Structured Output → Decision Trace
+- **PITFALLS.md** — 10 real pitfalls encountered building against LI.FI Intents MCP
+
+---
+
+## Quick start
+
 ```bash
-# 克隆仓库
 git clone https://github.com/tiyadegure/lifi-intents-demo.git
 cd lifi-intents-demo
 
-# 创建虚拟环境
 python3 -m venv .venv
 source .venv/bin/activate
-
-# 安装依赖
 pip install -e .
-```
 
-### CLI 使用
-```bash
-# 激活虚拟环境
-source .venv/bin/activate
-
-# 运行 CLI
+# CLI
 python -m lifi_agent
 
-# Safe Verdict 示例（带决策追踪）
+# Web UI
+python -m lifi_agent.server
+# → http://localhost:8888
+
+# Doctor
+python -m lifi_agent doctor
+```
+
+---
+
+## CLI examples
+
+```
+# Safe Verdict (with decision trace)
 > safe send 10 USDC from Base to Arbitrum if fee < 0.5%
-> safe send 10 USDC from Base to Arbitrum if fee < 0.1% and route is healthy
-> safe send 10 USDC from Base to Arbitrum avoid Ethereum prefer cheapest route
 
-# Solver-aware checks
+# Solver-aware route check
 > solver base arbitrum USDC USDC
-> solver base arbitrum
-> solver ethereum polygon
 
-# 普通命令
-> send 10 USDC from Base to Arbitrum
-> compare 50 USDC from Base to Polygon
-> route health base
+# Compare quotes across chains
+> compare 50 USDC from Base
+
+# Route health
+> route health base arbitrum
+
+# Quote history
 > stats
 ```
 
-### Web UI
-```bash
-# 安装 Web 依赖
-pip install -e ".[web]"
+---
 
-# 启动服务
-python -m lifi_agent.server
-# 打开 http://localhost:8888
-```
-
-## 🏗️ 技术架构
+## Project structure
 
 ```
-User (自然语言)
-     ↓
-AI Agent (意图解析 + LLM)
-     ↓
-MCP Client (协议封装)
-     ↓
-LI.FI Intents MCP Server
-     ↓
-Solver Network (跨链执行)
+lifi_agent/
+├── agent.py        # Intent parser, policy engine, safe verdict, doctor
+├── mcp_client.py   # LI.FI Intents MCP client (SSE transport)
+├── server.py       # Web UI (FastAPI + inline HTML)
+└── __main__.py     # CLI entry point
+
+PITFALLS.md         # 10 LI.FI Intents MCP pitfalls I hit while building this
 ```
 
-## 📁 项目结构
+---
 
-```
-lifi-intents-demo/
-├── lifi_agent/
-│   ├── __init__.py
-│   ├── __main__.py
-│   ├── agent.py          # AI Agent + 意图解析
-│   ├── mcp_client.py     # MCP 协议客户端
-│   └── server.py         # Web UI 后端
-├── demo_script.py        # Demo 演示脚本
-├── SUBMISSION.md         # 提交材料
-├── x_thread.md           # X Thread 文案
-└── README.md
-```
+## Why this matters
 
-## 🎯 为什么这个项目重要？
+LI.FI Intents MCP is a new protocol. Most developers will hit the same issues I did — SSE responses, session management, token address mapping, amount unit conversion.
 
-1. **降低门槛** - 不需要懂链、代币、Gas，自然语言就能跨链
-2. **AI 原生** - 符合 AI Agent 时代趋势
-3. **MCP 标准** - 可以集成到任何 AI 助手（Claude、GPT、Hermes）
-4. **Solver 机会** - 展示了 Solver 生态的可能性
+This project is both a **working demo** and a **developer reference**:
+- The code shows how to correctly integrate with LI.FI Intents MCP
+- PITFALLS.md documents the hard-won lessons
+- The Doctor tool helps others debug their own integrations
 
-## 📺 Demo
+---
 
-- **Web UI**: http://143.198.95.119:8888
-- **Demo 视频**: output/demo_v2.mp4
-- **GitHub**: https://github.com/tiyadegure/lifi-intents-demo
+## Links
 
-## 📝 提交材料
+- **Live demo**: [lifi.degure.me](http://lifi.degure.me)
+- **GitHub**: [tiyadegure/lifi-intents-demo](https://github.com/tiyadegure/lifi-intents-demo)
+- **LI.FI Intents docs**: [docs.li.fi/lifi-intents](https://docs.li.fi/lifi-intents/introduction)
+- **PITFALLS.md**: [10 pitfalls](PITFALLS.md)
 
-- [x] 代码（GitHub）
-- [x] Demo 视频
-- [x] Web UI 演示
-- [x] X Thread 文案
-- [ ] 提交表单（5/26 开放）
+---
 
-## 📄 License
+Built for the [LI.FI Intents Mini Builder Challenge](https://lifi.notion.site/LI-FI-Intents-Mini-Builder-Challenge-366f0ff14ac78168a0cdd9f44a3c1f13).
 
 MIT
