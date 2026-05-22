@@ -124,46 +124,112 @@ async def index():
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LI.FI Intents × AI Agent</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace; background: #0d1117; color: #e6edf3; min-height: 100vh; }
-  .container { max-width: 1000px; margin: 0 auto; padding: 24px; }
-  header { text-align: center; padding: 32px 0 24px; border-bottom: 1px solid #30363d; margin-bottom: 24px; }
-  header h1 { font-size: 28px; color: #58a6ff; font-weight: 700; }
-  header p { color: #8b949e; margin-top: 8px; font-size: 14px; }
-  .input-row { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
-  .input-row input, .input-row select { background: #161b22; border: 1px solid #30363d; color: #e6edf3; padding: 10px 14px; border-radius: 8px; font-size: 14px; font-family: monospace; }
-  .input-row input { flex: 1; min-width: 200px; }
-  .input-row select { min-width: 120px; }
-  .btn { background: #238636; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; }
-  .btn:hover { background: #2ea043; }
-  .btn:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
-  .btn-secondary { background: #21262d; border: 1px solid #30363d; }
-  .btn-secondary:hover { background: #30363d; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-  @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
-  .panel { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px; }
-  .panel h3 { color: #58a6ff; font-size: 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
-  .panel h3 .badge { background: #238636; color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 400; }
-  .quote-card { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
-  .quote-card .label { color: #8b949e; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-  .quote-card .value { font-size: 24px; font-weight: 700; color: #3fb950; margin: 4px 0; }
-  .quote-card .meta { color: #8b949e; font-size: 13px; }
-  .trace-item { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid #21262d; font-size: 13px; }
-  .trace-item:last-child { border-bottom: none; }
-  .trace-tool { color: #d29922; font-weight: 600; min-width: 160px; }
-  .trace-duration { color: #8b949e; min-width: 60px; text-align: right; }
-  .trace-result { color: #3fb950; flex: 1; }
-  .trace-error { color: #f85149; }
-  .status { padding: 8px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; }
-  .status.ok { background: #23863620; color: #3fb950; border: 1px solid #23863640; }
-  .status.err { background: #f8514920; color: #f85149; border: 1px solid #f8514940; }
-  .loading { display: inline-block; width: 16px; height: 16px; border: 2px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin 0.8s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .compare-table { width: 100%; border-collapse: collapse; }
-  .compare-table th { text-align: left; color: #8b949e; font-size: 12px; padding: 8px; border-bottom: 1px solid #30363d; }
-  .compare-table td { padding: 8px; font-size: 14px; border-bottom: 1px solid #21262d; }
-  .compare-table tr:first-child td { color: #3fb950; font-weight: 600; }
-  .footer { text-align: center; padding: 24px 0; color: #484f58; font-size: 12px; border-top: 1px solid #21262d; margin-top: 24px; }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg-base:#060a13;--bg-surface:#0c1220;--bg-card:#111a2e;--bg-card-hover:#162040;
+    --border:#1e2d4a;--border-subtle:#162040;
+    --text-primary:#e8edf5;--text-secondary:#8494b2;--text-muted:#4a5a7a;
+    --accent:#6c5ce7;--accent-glow:#6c5ce733;
+    --green:#00d68f;--green-dim:#00d68f22;
+    --red:#ff6b6b;--red-dim:#ff6b6b22;
+    --amber:#ffa94d;--amber-dim:#ffa94d22;
+    --radius:12px;--radius-sm:8px;
+  }
+  body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg-base);color:var(--text-primary);min-height:100vh;-webkit-font-smoothing:antialiased}
+  .container{max-width:1040px;margin:0 auto;padding:24px 20px}
+  /* Header */
+  header{text-align:center;padding:40px 0 28px;position:relative}
+  header::after{content:'';position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:200px;height:1px;background:linear-gradient(90deg,transparent,var(--accent),transparent)}
+  header h1{font-size:32px;font-weight:700;background:linear-gradient(135deg,#a78bfa,#6c5ce7,#4f8cff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:-0.5px}
+  header p{color:var(--text-secondary);margin-top:10px;font-size:14px;font-weight:400;letter-spacing:0.2px}
+  /* Input row */
+  .input-row{display:flex;gap:10px;margin:28px 0 20px;align-items:stretch}
+  .input-row input{flex:1;min-width:0;background:var(--bg-surface);border:1px solid var(--border);color:var(--text-primary);padding:12px 16px;border-radius:var(--radius-sm);font-size:14px;font-family:inherit;outline:none;transition:border-color .2s,box-shadow .2s}
+  .input-row input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+  .input-row input::placeholder{color:var(--text-muted)}
+  .btn{background:linear-gradient(135deg,#6c5ce7,#5a4bd1);color:#fff;border:none;padding:12px 24px;border-radius:var(--radius-sm);cursor:pointer;font-size:14px;font-weight:600;font-family:inherit;transition:transform .1s,box-shadow .2s,opacity .2s;white-space:nowrap}
+  .btn:hover{box-shadow:0 4px 20px var(--accent-glow);transform:translateY(-1px)}
+  .btn:active{transform:translateY(0)}
+  .btn:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none}
+  .btn-secondary{background:var(--bg-surface);border:1px solid var(--border);color:var(--text-secondary)}
+  .btn-secondary:hover{border-color:var(--accent);color:var(--text-primary);box-shadow:0 0 0 3px var(--accent-glow)}
+  /* Status */
+  #status{min-height:24px;margin-bottom:8px}
+  .status{padding:10px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;display:flex;align-items:center;gap:10px;animation:fadeSlideIn .3s ease}
+  .status.ok{background:var(--green-dim);color:var(--green);border:1px solid #00d68f33}
+  .status.err{background:var(--red-dim);color:var(--red);border:1px solid #ff6b6b33}
+  /* Grid */
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  /* Panel */
+  .panel{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;transition:border-color .2s}
+  .panel:hover{border-color:#2a3f6a}
+  .panel h3{color:var(--text-primary);font-size:15px;font-weight:600;margin-bottom:18px;display:flex;align-items:center;gap:10px;letter-spacing:-0.2px}
+  .panel h3 .badge{background:linear-gradient(135deg,#6c5ce7,#5a4bd1);color:#fff;font-size:10px;padding:3px 10px;border-radius:20px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px}
+  .panel h3 .badge-live{background:linear-gradient(135deg,#00d68f,#00b87a);color:#013d28}
+  /* Quote cards with gradient border */
+  .quote-card{position:relative;border-radius:var(--radius-sm);padding:1px;margin-bottom:12px;background:linear-gradient(135deg,#2a3f6a,#1e2d4a,#2a3f6a);animation:fadeSlideIn .35s ease both}
+  .quote-card:nth-child(2){animation-delay:.08s}
+  .quote-card:nth-child(3){animation-delay:.16s}
+  .quote-card-inner{background:var(--bg-card);border-radius:calc(var(--radius-sm) - 1px);padding:16px 18px;transition:background .2s}
+  .quote-card:hover .quote-card-inner{background:var(--bg-card-hover)}
+  .quote-card .label{color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;font-weight:600}
+  .quote-card .value{font-size:26px;font-weight:700;color:var(--green);margin:6px 0 2px;font-variant-numeric:tabular-nums}
+  .quote-card .value-dim{color:var(--text-primary)}
+  .quote-card .meta{color:var(--text-secondary);font-size:13px}
+  /* Highlight card */
+  .quote-card-highlight{background:linear-gradient(135deg,#6c5ce740,#4f8cff30,#6c5ce740)}
+  .quote-card-highlight .quote-card-inner{background:linear-gradient(135deg,#111a2e,#151f38)}
+  /* Traces */
+  .trace-item{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border-subtle);font-size:13px;animation:fadeSlideIn .25s ease both}
+  .trace-item:last-child{border-bottom:none}
+  .trace-tool{color:var(--amber);font-weight:600;min-width:150px;font-size:12px;font-family:'SF Mono',SFMono-Regular,Consolas,monospace}
+  .trace-duration{color:var(--text-muted);min-width:55px;text-align:right;font-variant-numeric:tabular-nums;font-size:12px}
+  .trace-result{color:var(--green);flex:1;word-break:break-word}
+  .trace-error{color:var(--red)}
+  /* Compare table */
+  .compare-table{width:100%;border-collapse:separate;border-spacing:0}
+  .compare-table th{text-align:left;color:var(--text-muted);font-size:11px;padding:10px 12px;border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:0.8px;font-weight:600}
+  .compare-table td{padding:12px;font-size:14px;border-bottom:1px solid var(--border-subtle);transition:background .15s}
+  .compare-table tbody tr:hover td{background:var(--bg-card)}
+  .compare-table tbody tr:first-child td{color:var(--green);font-weight:600}
+  .compare-table tbody tr:first-child td:first-child::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);margin-right:8px;vertical-align:middle}
+  .compare-fee{font-variant-numeric:tabular-nums}
+  /* Loading spinner */
+  .loading{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes fadeSlideIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes pulse{0%,100%{opacity:.4}50%{opacity:.8}}
+  /* Skeleton loading */
+  .skeleton{background:linear-gradient(90deg,var(--bg-card) 25%,var(--bg-card-hover) 50%,var(--bg-card) 75%);background-size:200% 100%;animation:pulse 1.5s ease-in-out infinite;border-radius:6px;height:16px;margin:8px 0}
+  .skeleton.w60{width:60%}.skeleton.w40{width:40%}.skeleton.w80{width:80%}
+  /* Empty state */
+  .empty-state{color:var(--text-muted);font-size:13px;padding:8px 0}
+  /* Footer */
+  .footer{text-align:center;padding:28px 0 12px;color:var(--text-muted);font-size:12px;border-top:1px solid var(--border-subtle);margin-top:28px}
+  .footer a{color:var(--accent);text-decoration:none;transition:color .15s}
+  .footer a:hover{color:#a78bfa}
+  /* Mobile */
+  @media(max-width:768px){
+    .container{padding:16px 14px}
+    header{padding:24px 0 20px}
+    header h1{font-size:24px}
+    .input-row{flex-direction:column;gap:8px}
+    .input-row .btn-row{display:flex;gap:8px}
+    .btn{padding:12px 16px}
+    .grid{grid-template-columns:1fr;gap:16px}
+    .panel{padding:18px 14px}
+    .quote-card .value{font-size:22px}
+    .trace-item{flex-wrap:wrap;gap:6px}
+    .trace-tool{min-width:auto;font-size:11px}
+    .trace-duration{min-width:auto}
+    .compare-table{font-size:13px}
+    .compare-table th,.compare-table td{padding:8px 10px}
+  }
+  @media(max-width:420px){
+    header h1{font-size:20px}
+    header p{font-size:12px}
+  }
 </style>
 </head>
 <body>
@@ -174,7 +240,7 @@ async def index():
   </header>
 
   <div class="input-row">
-    <input type="text" id="intentInput" placeholder="send 10 USDC from Base to Arbitrum" />
+    <input type="text" id="intentInput" placeholder="send 10 USDC from Base to Arbitrum" spellcheck="false" autocomplete="off" />
     <button class="btn" id="submitBtn" onclick="submitIntent()">Get Quote</button>
     <button class="btn btn-secondary" onclick="compareQuotes()">Compare</button>
   </div>
@@ -183,35 +249,37 @@ async def index():
 
   <div class="grid">
     <div class="panel">
-      <h3>Quote Result <span class="badge" id="quoteBadge" style="display:none">LIVE</span></h3>
+      <h3>Quote Result <span class="badge badge-live" id="quoteBadge" style="display:none">LIVE</span></h3>
       <div id="quoteResult">
-        <p style="color:#484f58">Enter an intent to get a cross-chain quote from the solver network.</p>
+        <p class="empty-state">Enter an intent to get a cross-chain quote from the solver network.</p>
       </div>
     </div>
 
     <div class="panel">
       <h3>Agent Reasoning <span class="badge" id="traceBadge">0 steps</span></h3>
       <div id="traces">
-        <p style="color:#484f58">Agent tool calls will appear here in real-time.</p>
+        <p class="empty-state">Agent tool calls will appear here in real-time.</p>
       </div>
     </div>
   </div>
 
-  <div class="panel" style="margin-top:24px">
+  <div class="panel" style="margin-top:20px">
     <h3>Route Comparison</h3>
     <div id="compareResult">
-      <p style="color:#484f58">Click "Compare" to see quotes across multiple destination chains.</p>
+      <p class="empty-state">Click "Compare" to see quotes across multiple destination chains.</p>
     </div>
   </div>
 
   <div class="footer">
-    <p>Built for LI.FI Intents Builder Challenge · <a href="https://docs.li.fi/lifi-intents/introduction" style="color:#58a6ff">Docs</a> · <a href="https://github.com/tiyadegure/lifi-intents-demo" style="color:#58a6ff">GitHub</a></p>
+    <p>Built for LI.FI Intents Builder Challenge · <a href="https://docs.li.fi/lifi-intents/introduction">Docs</a> · <a href="https://github.com/tiyadegure/lifi-intents-demo">GitHub</a></p>
   </div>
 </div>
 
 <script>
 const chains = ['ethereum','base','arbitrum','optimism','polygon','bsc'];
 const tokens = ['USDC','USDT','ETH'];
+
+function capitalize(s){return s.charAt(0).toUpperCase()+s.slice(1)}
 
 function parseIntent(text) {
   text = text.toLowerCase().trim();
@@ -232,6 +300,11 @@ function setStatus(msg, type) {
   document.getElementById('status').innerHTML = msg ? '<div class="status ' + type + '">' + msg + '</div>' : '';
 }
 
+function showSkeleton(id) {
+  document.getElementById(id).innerHTML =
+    '<div class="skeleton w60"></div><div class="skeleton w80"></div><div class="skeleton w40"></div>';
+}
+
 async function submitIntent() {
   const text = document.getElementById('intentInput').value;
   const intent = parseIntent(text);
@@ -239,7 +312,9 @@ async function submitIntent() {
   if (!intent.from || !intent.to) { setStatus('Need two chains. Supported: ' + chains.join(', '), 'err'); return; }
 
   document.getElementById('submitBtn').disabled = true;
-  setStatus('<span class="loading"></span> Querying solver network...', 'ok');
+  setStatus('<span class="loading"></span> Querying solver network…', 'ok');
+  showSkeleton('quoteResult');
+  document.getElementById('quoteBadge').style.display = 'none';
 
   try {
     const url = '/api/quote?from_chain=' + intent.from + '&to_chain=' + intent.to + '&token=' + intent.token + '&amount=' + intent.amount;
@@ -257,13 +332,13 @@ function renderQuote(data, intent) {
   const el = document.getElementById('quoteResult');
   const badge = document.getElementById('quoteBadge');
   if (data.error) {
-    el.innerHTML = '<div class="quote-card"><div class="label">Error</div><div class="meta" style="color:#f85149">' + data.error + '</div></div>';
+    el.innerHTML = '<div class="quote-card"><div class="quote-card-inner"><div class="label">Error</div><div class="meta" style="color:var(--red);margin-top:6px">' + data.error + '</div></div></div>';
     badge.style.display = 'none';
     return;
   }
   const quotes = data.data?.quotes || [];
   if (!quotes.length) {
-    el.innerHTML = '<div class="quote-card"><div class="label">No quotes</div><div class="meta">No solver available for this route.</div></div>';
+    el.innerHTML = '<div class="quote-card"><div class="quote-card-inner"><div class="label">No quotes</div><div class="meta" style="margin-top:6px">No solver available for this route.</div></div></div>';
     badge.style.display = 'none';
     return;
   }
@@ -271,17 +346,17 @@ function renderQuote(data, intent) {
   badge.style.display = 'inline';
   el.innerHTML =
     '<div class="quote-card">' +
-      '<div class="label">Route</div>' +
-      '<div class="meta">' + intent.from.charAt(0).toUpperCase() + intent.from.slice(1) + ' → ' + intent.to.charAt(0).toUpperCase() + intent.to.slice(1) + '</div>' +
+      '<div class="quote-card-inner"><div class="label">Route</div>' +
+      '<div class="meta" style="margin-top:6px">' + capitalize(intent.from) + ' → ' + capitalize(intent.to) + '</div></div>' +
     '</div>' +
     '<div class="quote-card">' +
-      '<div class="label">You Send</div>' +
-      '<div class="value" style="color:#e6edf3">' + q.inputAmount + '</div>' +
+      '<div class="quote-card-inner"><div class="label">You Send</div>' +
+      '<div class="value value-dim">' + q.inputAmount + '</div></div>' +
     '</div>' +
-    '<div class="quote-card">' +
-      '<div class="label">You Receive</div>' +
+    '<div class="quote-card quote-card-highlight">' +
+      '<div class="quote-card-inner"><div class="label">You Receive</div>' +
       '<div class="value">' + q.outputAmount + '</div>' +
-      '<div class="meta">Quote ID: ' + q.quoteId + '</div>' +
+      '<div class="meta">Quote ID: ' + q.quoteId + '</div></div>' +
     '</div>';
 }
 
@@ -290,7 +365,8 @@ async function compareQuotes() {
   const intent = parseIntent(text);
   if (!intent || !intent.from) { setStatus('Enter intent with source chain. Try: send 10 USDC from Ethereum', 'err'); return; }
 
-  setStatus('<span class="loading"></span> Comparing quotes across chains...', 'ok');
+  setStatus('<span class="loading"></span> Comparing quotes across chains…', 'ok');
+  showSkeleton('compareResult');
 
   try {
     const url = '/api/compare?from_chain=' + intent.from + '&token=' + intent.token + '&amount=' + intent.amount;
@@ -307,15 +383,15 @@ function renderCompare(results, intent) {
   const el = document.getElementById('compareResult');
   setStatus('', '');
   if (!results.length) {
-    el.innerHTML = '<p style="color:#484f58">No quotes available for comparison.</p>';
+    el.innerHTML = '<p class="empty-state">No quotes available for comparison.</p>';
     return;
   }
-  let html = '<table class="compare-table"><tr><th>Destination</th><th>Output</th><th>Fee</th></tr>';
+  let html = '<table class="compare-table"><thead><tr><th>Destination</th><th>Output</th><th>Fee</th></tr></thead><tbody>';
   results.forEach((r, i) => {
-    html += '<tr><td>' + intent.from.charAt(0).toUpperCase() + intent.from.slice(1) + ' → ' +
-      r.chain.charAt(0).toUpperCase() + r.chain.slice(1) + '</td><td>' + r.output + '</td><td>~' + Math.abs(parseFloat(r.fee_pct)).toFixed(2) + '%</td></tr>';
+    const feeAbs = Math.abs(parseFloat(r.fee_pct)).toFixed(2);
+    html += '<tr><td>' + capitalize(intent.from) + ' → ' + capitalize(r.chain) + '</td><td>' + r.output + '</td><td class="compare-fee">~' + feeAbs + '%</td></tr>';
   });
-  html += '</table>';
+  html += '</tbody></table>';
   el.innerHTML = html;
 }
 
