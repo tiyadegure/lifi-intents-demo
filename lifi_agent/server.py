@@ -346,7 +346,7 @@ async def index():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LI.FI Intents × AI Agent — Safe Verdict</title>
+<title>LI.FI Intents Developer Playground</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
   *{margin:0;padding:0;box-sizing:border-box}
@@ -486,8 +486,8 @@ async def index():
 <body>
 <div class="container">
   <header>
-    <h1>LI.FI Intents × AI Agent</h1>
-    <p>Safe Verdict — Policy-driven cross-chain decision engine</p>
+    <h1>LI.FI Intents Developer Playground</h1>
+    <p>Solver-aware technical demo — natural language → policy-driven cross-chain verdict</p>
     <div class="badge-row">
       <span class="badge">MCP Protocol</span>
       <span class="badge">Safe Verdict</span>
@@ -585,9 +585,9 @@ async def index():
   </div>
 
   <footer>
-    Built for <a href="https://lifi.notion.site/LI-FI-Intents-Mini-Builder-Challenge-366f0ff14ac78168a0cdd9f44a3c1f13" target="_blank">LI.FI Intents Builder Challenge</a>
-    · <a href="/stats">Dashboard</a>
+    Built for the <a href="https://lifi.notion.site/LI-FI-Intents-Mini-Builder-Challenge-366f0ff14ac78168a0cdd9f44a3c1f13" target="_blank">LI.FI Intents Builder Challenge</a>
     · <a href="https://github.com/tiyadegure/lifi-intents-demo" target="_blank">GitHub</a>
+    · <a href="https://github.com/tiyadegure/lifi-intents-demo/blob/main/PITFALLS.md" target="_blank">Pitfalls</a>
   </footer>
 </div>
 
