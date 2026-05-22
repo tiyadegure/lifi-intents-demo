@@ -9,9 +9,12 @@ Usage:
 import sys
 import json
 import os
+import re
 import time
 import sqlite3
+import logging
 from contextlib import contextmanager
+from typing import Optional
 from pathlib import Path
 from datetime import datetime
 from .mcp_client import MCPClient
@@ -54,7 +57,7 @@ class QuoteStore:
 
     def store(self, intent_repr: str, from_chain: str, to_chain: str,
               token: str, input_amount: str, output_amount: str,
-              fee_pct: str, quote_id: str):
+              fee_pct: Optional[str], quote_id: str):
         with self._connect() as conn:
             conn.execute("""
                 INSERT INTO quotes (intent, from_chain, to_chain, token,
@@ -101,7 +104,13 @@ class QuoteStore:
                 "top_tokens": [(t[0], t[1]) for t in top_tokens],
             }
 
-quote_store = QuoteStore()
+_quote_store = None
+
+def get_quote_store() -> QuoteStore:
+    global _quote_store
+    if _quote_store is None:
+        _quote_store = QuoteStore()
+    return _quote_store
 
 # ── Rich TUI ──────────────────────────────────────────────────────
 from rich.console import Console
@@ -193,8 +202,8 @@ TOKENS = {
     },
 }
 
-# Dummy address for demo (replace with real wallet in production)
-DEMO_ADDRESS = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"
+# Configurable demo address (set DEMO_ADDRESS env var for production)
+DEMO_ADDRESS = os.environ.get("DEMO_ADDRESS", "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045")
 
 
 # ── Intent Parser ───────────────────────────────────────────────────
@@ -249,7 +258,6 @@ def parse_intent(text: str) -> Intent:
         "bridge 50 USDT polygon to ethereum"
         "transfer 0.5 ETH from optimism to base"
     """
-    import re
     text = text.lower().strip()
 
     # Normalize arrow syntax: "base->arb", "base to arb", "bridge X eth to poly"
@@ -408,7 +416,7 @@ class LifAgent:
             if quotes:
                 q = quotes[0]
                 output = q.get("outputAmount", "0")
-                quote_store.store(
+                get_quote_store().store(
                     intent_repr=repr(intent),
                     from_chain=intent.from_chain,
                     to_chain=intent.to_chain,
@@ -443,7 +451,8 @@ class LifAgent:
                         "quote_id": q.get("quoteId", ""),
                         "fee_pct": self._calc_fee(intent.amount, output),
                     })
-            except Exception:
+            except Exception as e:
+                logging.debug(f"Quote failed for {chain}: {e}")
                 continue
 
         # Sort by output amount (higher is better)
@@ -456,19 +465,18 @@ class LifAgent:
         results.sort(key=parse_output, reverse=True)
         return results
 
-    def _calc_fee(self, input_amount: str, output_amount: str) -> str:
-        """Calculate fee percentage."""
+    def _calc_fee(self, input_amount: str, output_amount: str) -> Optional[str]:
+        """Calculate fee percentage. Returns None on error."""
         try:
             inp = float(input_amount)
-            # Strip non-numeric chars (e.g. " USDC")
             out_str = ''.join(c for c in output_amount if c.isdigit() or c == '.')
             out = float(out_str)
             if inp == 0:
-                return "999"
+                return None
             fee = (inp - out) / inp * 100
             return f"{fee:.2f}"
         except (ValueError, ZeroDivisionError):
-            return "999"
+            return None
 
     def prepare_order(self, quote_id: str, address: str = DEMO_ADDRESS) -> dict:
         """Prepare an order from a quote."""
@@ -740,7 +748,7 @@ def interactive():
             continue
 
         if text == "history":
-            recent = quote_store.get_recent(10)
+            recent = get_quote_store().get_recent(10)
             if recent:
                 table = Table(title="Recent Quotes (SQLite)", box=box.ROUNDED, border_style="dim")
                 table.add_column("#", style="dim", width=4)
@@ -752,8 +760,8 @@ def interactive():
                     ts = entry.get("timestamp", "?")[:19]  # YYYY-MM-DD HH:MM:SS
                     route = f"{entry['from_chain']}→{entry['to_chain']} ({entry['token'].upper()})"
                     output = entry.get("output_amount", "?")
-                    fee = entry.get("fee_pct", "?")
-                    fee_str = f"{float(fee):.2f}%" if fee and fee != "999" else "?"
+                    fee = entry.get("fee_pct")
+                    fee_str = f"{float(fee):.2f}%" if fee else "?"
                     table.add_row(str(i), ts, route, output, fee_str)
                 console.print()
                 console.print(table)
@@ -763,7 +771,7 @@ def interactive():
             continue
 
         if text == "stats":
-            stats = quote_store.get_stats()
+            stats = get_quote_store().get_stats()
             if stats["total"] == 0:
                 console.print("\n  [dim]No quotes recorded yet.[/dim]\n")
                 continue

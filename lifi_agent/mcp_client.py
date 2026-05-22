@@ -36,6 +36,13 @@ class MCPClient:
         self._rate_lock = asyncio.Lock()
         self._rate_lock_sync = threading.Lock()
 
+    def _cleanup_cache(self):
+        """Remove expired cache entries."""
+        now = time.time()
+        expired = [k for k, (ts, _) in self._cache.items() if now - ts >= CACHE_TTL]
+        for k in expired:
+            del self._cache[k]
+
     @property
     def client(self) -> httpx.Client:
         """Lazy-init sync client with connection pooling."""
@@ -180,6 +187,7 @@ class MCPClient:
 
     def call(self, tool: str, args: dict = None, use_cache: bool = True, retries: int = 2) -> dict:
         """Call an MCP tool (sync) with rate limiting, connection pooling, caching, and retry."""
+        self._cleanup_cache()
         cache_key = f"{tool}:{json.dumps(args or {}, sort_keys=True)}"
 
         if use_cache and cache_key in self._cache:
@@ -233,6 +241,7 @@ class MCPClient:
     async def call_async(self, tool: str, args: dict = None, use_cache: bool = True, retries: int = 2) -> dict:
         """Call an MCP tool (async) with rate limiting, connection pooling, caching, and retry.
         Supports parallel calls via asyncio.gather()."""
+        self._cleanup_cache()
         cache_key = f"{tool}:{json.dumps(args or {}, sort_keys=True)}"
 
         if use_cache and cache_key in self._cache:

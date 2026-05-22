@@ -85,6 +85,20 @@ async def get_routes():
 
 @app.get("/api/quote")
 async def get_quote(from_chain: str, to_chain: str, token: str, amount: str):
+    # Input validation
+    valid_chains = {"ethereum", "base", "arbitrum", "optimism", "polygon", "bsc", "avalanche", "zksync", "linea", "scroll", "blast", "mantle", "sonic"}
+    valid_tokens = {"usdc", "usdt", "eth", "weth"}
+    if from_chain.lower() not in valid_chains:
+        return JSONResponse({"error": f"Invalid from_chain: {from_chain}"}, status_code=400)
+    if to_chain.lower() not in valid_chains:
+        return JSONResponse({"error": f"Invalid to_chain: {to_chain}"}, status_code=400)
+    if token.lower() not in valid_tokens:
+        return JSONResponse({"error": f"Invalid token: {token}"}, status_code=400)
+    try:
+        float(amount)
+    except ValueError:
+        return JSONResponse({"error": f"Invalid amount: {amount}"}, status_code=400)
+
     await asyncio.to_thread(ensure_connected)
     start = time.time()
     try:
@@ -777,7 +791,7 @@ async function refreshSolvers() {
   }
 }
 
-async function loadStats() {
+async function loadRoutes() {
   try {
     const res = await fetch('/api/routes');
     const data = await res.json();
