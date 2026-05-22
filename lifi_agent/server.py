@@ -4,7 +4,11 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
+import asyncio
+import collections
+import html as html_mod
 import json
+import threading
 import time
 
 from lifi_agent.agent import LifAgent, Intent, parse_intent
@@ -13,7 +17,14 @@ app = FastAPI(title="LI.FI Intents Agent", version="1.0.0")
 agent = LifAgent()
 
 # ── Reasoning trace storage ─────────────────────────────────────────
-traces: list[dict] = []
+traces = collections.deque(maxlen=200)
+traces_lock = threading.Lock()
+_connect_lock = threading.Lock()
+
+
+def _escape_html(value: str) -> str:
+    """Escape a string for safe insertion into HTML."""
+    return html_mod.escape(str(value), quote=True)
 
 
 def trace_step(tool: str, args: dict, result: dict, duration_ms: int):
@@ -25,9 +36,8 @@ def trace_step(tool: str, args: dict, result: dict, duration_ms: int):
         "result_summary": _summarize_result(result),
         "duration_ms": duration_ms,
     }
-    traces.append(step)
-    if len(traces) > 100:
-        traces.pop(0)
+    with traces_lock:
+        traces.append(step)
     return step
 
 
@@ -55,17 +65,19 @@ async def startup():
 def ensure_connected():
     """Lazy MCP connection."""
     if not agent.mcp._connected:
-        try:
-            agent.connect()
-        except Exception as e:
-            print(f"MCP connect failed: {e}")
+        with _connect_lock:
+            if not agent.mcp._connected:
+                try:
+                    agent.connect()
+                except Exception as e:
+                    print(f"MCP connect failed: {e}")
 
 
 @app.get("/api/routes")
 async def get_routes():
-    ensure_connected()
+    await asyncio.to_thread(ensure_connected)
     start = time.time()
-    result = agent.get_routes()
+    result = await asyncio.to_thread(agent.get_routes)
     duration = int((time.time() - start) * 1000)
     trace_step("get-supported-routes", {}, result, duration)
     return result
@@ -73,11 +85,13 @@ async def get_routes():
 
 @app.get("/api/quote")
 async def get_quote(from_chain: str, to_chain: str, token: str, amount: str):
-    ensure_connected()
+    await asyncio.to_thread(ensure_connected)
     start = time.time()
     try:
-        intent = parse_intent(f"send {amount} {token} from {from_chain} to {to_chain}")
-        result = agent.get_quote(intent)
+        intent = await asyncio.to_thread(
+            parse_intent, f"send {amount} {token} from {from_chain} to {to_chain}"
+        )
+        result = await asyncio.to_thread(agent.get_quote, intent)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     duration = int((time.time() - start) * 1000)
@@ -89,11 +103,13 @@ async def get_quote(from_chain: str, to_chain: str, token: str, amount: str):
 
 @app.get("/api/compare")
 async def compare_quotes(from_chain: str, token: str, amount: str):
-    ensure_connected()
+    await asyncio.to_thread(ensure_connected)
     start = time.time()
     try:
-        intent = parse_intent(f"send {amount} {token} from {from_chain} to ethereum")
-        results = agent.compare_quotes(intent)
+        intent = await asyncio.to_thread(
+            parse_intent, f"send {amount} {token} from {from_chain} to ethereum"
+        )
+        results = await asyncio.to_thread(agent.compare_quotes, intent)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     duration = int((time.time() - start) * 1000)
@@ -105,7 +121,8 @@ async def compare_quotes(from_chain: str, token: str, amount: str):
 
 @app.get("/api/traces")
 async def get_traces():
-    return {"traces": traces[-20:]}
+    with traces_lock:
+        return {"traces": list(traces)[-20:]}
 
 
 @app.get("/api/favorites")
@@ -115,19 +132,18 @@ async def get_favorites():
 
 @app.get("/api/solvers")
 async def get_solvers():
-    ensure_connected()
+    await asyncio.to_thread(ensure_connected)
     start = time.time()
-    result = agent.get_solver_identities()
+    result = await asyncio.to_thread(agent.get_solver_identities)
     duration = int((time.time() - start) * 1000)
     trace_step("get-solver-identities", {}, result, duration)
     return result
 
 
-@app.get("/api/solver-stats")
-async def get_solver_stats():
+def _collect_solver_stats() -> dict:
+    """Collect solver statistics (runs in thread)."""
     ensure_connected()
     start = time.time()
-    # Get solver identities
     solvers_result = agent.get_solver_identities()
     identities = solvers_result.get("data", {}).get("solverIdentities",
                  solvers_result.get("data", {}).get("solvers", []))
@@ -139,10 +155,8 @@ async def get_solver_stats():
     checked = 0
     chain_counts: dict[str, int] = {}
 
-    # Sample a subset of routes for health checks
     routes_result = agent.get_routes()
     route_list = routes_result.get("data", {}).get("routes", [])
-    # Deduplicate chain pairs
     seen_pairs: set[tuple[int, int]] = set()
     sample_routes = []
     for r in route_list:
@@ -150,7 +164,7 @@ async def get_solver_stats():
         if pair not in seen_pairs:
             seen_pairs.add(pair)
             sample_routes.append(r)
-    sample_routes = sample_routes[:20]  # cap at 20 for performance
+    sample_routes = sample_routes[:20]
 
     for r in sample_routes:
         from_id = str(r.get("fromChainId", ""))
@@ -164,7 +178,6 @@ async def get_solver_stats():
             is_healthy = health.get("data", {}).get("healthy", True)
             if is_healthy:
                 total_routes += 1
-            # Track chain distribution from route data
             from_name = r.get("fromChain", {}).get("name", from_id)
             to_name = r.get("toChain", {}).get("name", to_id)
             chain_counts[from_name] = chain_counts.get(from_name, 0) + 1
@@ -172,9 +185,7 @@ async def get_solver_stats():
         except Exception:
             continue
 
-    # Count active solvers (solvers that appear in healthy routes)
     active_solvers = min(total_solvers, max(1, total_routes)) if total_solvers > 0 else 0
-    # Fallback chain distribution from solver data if no routes returned chain names
     if not chain_counts and identities:
         for s in identities:
             for ch in (s.get("supportedChains") or s.get("chains") or []):
@@ -193,11 +204,16 @@ async def get_solver_stats():
     }
 
 
+@app.get("/api/solver-stats")
+async def get_solver_stats():
+    return await asyncio.to_thread(_collect_solver_stats)
+
+
 @app.get("/api/track-order")
 async def track_order(order_id: str):
-    ensure_connected()
+    await asyncio.to_thread(ensure_connected)
     start = time.time()
-    result = agent.track_order(order_id)
+    result = await asyncio.to_thread(agent.track_order, order_id)
     duration = int((time.time() - start) * 1000)
     trace_step("track-order", {"orderId": order_id}, result, duration)
     return result
@@ -205,9 +221,9 @@ async def track_order(order_id: str):
 
 @app.get("/api/recent-orders")
 async def recent_orders():
-    ensure_connected()
+    await asyncio.to_thread(ensure_connected)
     start = time.time()
-    result = agent.list_orders(5)
+    result = await asyncio.to_thread(agent.list_orders, 5)
     duration = int((time.time() - start) * 1000)
     trace_step("list-orders", {"limit": 5}, result, duration)
     return result
@@ -536,6 +552,11 @@ async def index():
 </div>
 
 <script>
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.appendChild(document.createTextNode(s == null ? '' : String(s)));
+  return d.innerHTML;
+}
 const chains = ['ethereum','base','arbitrum','optimism','polygon','bsc'];
 const tokens = ['USDC','USDT','ETH'];
 
@@ -584,7 +605,7 @@ async function submitIntent() {
     refreshTraces();
     document.getElementById('statLastQuote').textContent = new Date().toLocaleTimeString();
   } catch (e) {
-    setStatus('Request failed: ' + e.message, 'err');
+    setStatus('Request failed: ' + escapeHtml(e.message), 'err');
   }
   document.getElementById('submitBtn').disabled = false;
 }
@@ -593,7 +614,7 @@ function renderQuote(data, intent) {
   const el = document.getElementById('quoteResult');
   const badge = document.getElementById('quoteBadge');
   if (data.error) {
-    el.innerHTML = '<div class="quote-card"><div class="quote-card-inner"><div class="label">Error</div><div class="meta" style="color:var(--red);margin-top:6px">' + data.error + '</div></div></div>';
+    el.innerHTML = '<div class="quote-card"><div class="quote-card-inner"><div class="label">Error</div><div class="meta" style="color:var(--red);margin-top:6px">' + escapeHtml(data.error) + '</div></div></div>';
     badge.style.display = 'none';
     return;
   }
@@ -604,20 +625,21 @@ function renderQuote(data, intent) {
     return;
   }
   const q = quotes[0];
+  const safeQuoteId = escapeHtml(q.quoteId);
   badge.style.display = 'inline';
   el.innerHTML =
     '<div class="quote-card">' +
       '<div class="quote-card-inner"><div class="label">Route</div>' +
-      '<div class="meta" style="margin-top:6px">' + capitalize(intent.from) + ' → ' + capitalize(intent.to) + '</div></div>' +
+      '<div class="meta" style="margin-top:6px">' + escapeHtml(capitalize(intent.from)) + ' → ' + escapeHtml(capitalize(intent.to)) + '</div></div>' +
     '</div>' +
     '<div class="quote-card">' +
       '<div class="quote-card-inner"><div class="label">You Send</div>' +
-      '<div class="value value-dim">' + q.inputAmount + '</div></div>' +
+      '<div class="value value-dim">' + escapeHtml(q.inputAmount) + '</div></div>' +
     '</div>' +
     '<div class="quote-card quote-card-highlight">' +
       '<div class="quote-card-inner"><div class="label">You Receive</div>' +
-      '<div class="value">' + q.outputAmount + '</div>' +
-      '<div class="meta">Quote ID: ' + q.quoteId + ' <button class="copy-btn" onclick="copyQuoteId(\'' + q.quoteId + '\',this)">Copy</button></div></div>' +
+      '<div class="value">' + escapeHtml(q.outputAmount) + '</div>' +
+      '<div class="meta">Quote ID: ' + safeQuoteId + ' <button class="copy-btn" onclick="copyQuoteId(this.getAttribute(\'data-id\'),this)" data-id="' + safeQuoteId + '">Copy</button></div></div>' +
     '</div>';
 }
 
@@ -636,7 +658,7 @@ async function compareQuotes() {
     renderCompare(data.data || [], intent);
     refreshTraces();
   } catch (e) {
-    setStatus('Compare failed: ' + e.message, 'err');
+    setStatus('Compare failed: ' + escapeHtml(e.message), 'err');
   }
 }
 
@@ -655,7 +677,7 @@ function renderCompare(results, intent) {
   results.forEach((r, i) => {
     const feeAbs = Math.abs(parseFloat(r.fee_pct)).toFixed(2);
     const cls = i === maxIdx ? ' class="winner"' : '';
-    html += '<tr' + cls + '><td>' + capitalize(intent.from) + ' → ' + capitalize(r.chain) + '</td><td>' + r.output + '</td><td class="compare-fee">~' + feeAbs + '%</td></tr>';
+    html += '<tr' + cls + '><td>' + escapeHtml(capitalize(intent.from)) + ' → ' + escapeHtml(capitalize(r.chain)) + '</td><td>' + escapeHtml(r.output) + '</td><td class="compare-fee">~' + escapeHtml(feeAbs) + '%</td></tr>';
   });
   html += '</tbody></table>';
   el.innerHTML = html;
@@ -682,11 +704,11 @@ async function refreshTraces() {
     }
     badge.textContent = deduped.length + ' steps' + (deduped.length < traces.length ? ' (' + traces.length + ' total)' : '');
     el.innerHTML = deduped.map(t => {
-      const dur = t.duration_ms === 0 ? '⚡ cached' : t.duration_ms + 'ms';
-      const countBadge = t.count > 1 ? '<span class="trace-count">×' + t.count + '</span>' : '';
+      const dur = t.duration_ms === 0 ? '⚡ cached' : escapeHtml(t.duration_ms) + 'ms';
+      const countBadge = t.count > 1 ? '<span class="trace-count">×' + escapeHtml(t.count) + '</span>' : '';
       return '<div class="trace-item">' +
-        '<span class="trace-tool">⚡ ' + t.tool + '</span>' +
-        '<span class="trace-result ' + (t.isError ? 'trace-error' : '') + '">' + t.result_summary + countBadge + '</span>' +
+        '<span class="trace-tool">⚡ ' + escapeHtml(t.tool) + '</span>' +
+        '<span class="trace-result ' + (t.isError ? 'trace-error' : '') + '">' + escapeHtml(t.result_summary) + countBadge + '</span>' +
         '<span class="trace-duration">' + dur + '</span>' +
       '</div>';
     }).join('');
@@ -729,12 +751,12 @@ function renderSolvers(data) {
     const name = s.solverName || s.name || truncateAddr(s.address || s.solverAddress || '');
     const addr = s.address || s.solverAddress || '';
     const chains = s.supportedChains || s.chains || [];
-    const chainBadges = chains.map(c => '<span class="solver-chain-badge">' + c + '</span>').join('');
+    const chainBadges = chains.map(c => '<span class="solver-chain-badge">' + escapeHtml(c) + '</span>').join('');
     const delay = (i * 0.06).toFixed(2);
     html += '<div class="solver-card" style="animation-delay:' + delay + 's">' +
       '<div class="solver-card-header">' +
         '<span class="solver-status"></span>' +
-        '<span class="solver-name" title="' + (addr || name) + '">' + name + '</span>' +
+        '<span class="solver-name" title="' + escapeHtml(addr || name) + '">' + escapeHtml(name) + '</span>' +
       '</div>' +
       '<div class="solver-chains">' + (chainBadges || '<span class="solver-chain-badge">unknown</span>') + '</div>' +
     '</div>';
@@ -751,7 +773,7 @@ async function refreshSolvers() {
     const data = await res.json();
     renderSolvers(data);
   } catch (e) {
-    el.innerHTML = '<p class="empty-state" style="color:var(--red)">Failed to load solvers: ' + e.message + '</p>';
+    el.innerHTML = '<p class="empty-state" style="color:var(--red)">Failed to load solvers: ' + escapeHtml(e.message) + '</p>';
   }
 }
 
@@ -802,17 +824,17 @@ async function refreshSolverStats() {
       const pct = maxVal > 0 ? Math.max(4, (count / maxVal) * 100) : 4;
       const delay = (i * 0.05).toFixed(2);
       html += '<div class="chain-bar-row" style="animation-delay:' + delay + 's">' +
-        '<span class="chain-bar-label">' + chain + '</span>' +
+        '<span class="chain-bar-label">' + escapeHtml(chain) + '</span>' +
         '<div class="chain-bar-track">' +
           '<div class="chain-bar-fill" style="width:' + pct + '%">' +
-            '<span class="chain-bar-count">' + count + '</span>' +
+            '<span class="chain-bar-count">' + escapeHtml(count) + '</span>' +
           '</div>' +
         '</div>' +
       '</div>';
     });
     chartEl.innerHTML = html;
   } catch (e) {
-    chartEl.innerHTML = '<p class="empty-state" style="color:var(--red)">Failed to load stats: ' + e.message + '</p>';
+    chartEl.innerHTML = '<p class="empty-state" style="color:var(--red)">Failed to load stats: ' + escapeHtml(e.message) + '</p>';
     document.getElementById('analyticsBadge').textContent = 'error';
   }
 }
