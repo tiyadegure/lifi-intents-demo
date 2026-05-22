@@ -32,7 +32,7 @@ class TestDemoModeVerdict:
         intent = Intent("base", "arbitrum", "usdc", "10")
         policy = Policy(max_fee_pct=1.0)
         verdict = agent.safe_verdict(intent, policy)
-        fee_check = [c for c in verdict.checks if c["name"] == "Fee Calculated"][0]
+        fee_check = [c for c in verdict.checks if c["name"] == "Calculate Fee"][0]
         assert "0.20" in fee_check["detail"]
 
     def test_decision_trace(self):

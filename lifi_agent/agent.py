@@ -701,237 +701,33 @@ class LifAgent:
         return result
 
     def safe_verdict(self, intent: Intent, policy: Policy) -> Verdict:
-        """Execute the Safe Verdict pipeline: check route → health → quote → policy → decision.
+        """Execute the Safe Verdict pipeline.
         
         Returns a Verdict with EXECUTABLE or REFUSED and detailed reasoning.
+        Delegates to safe_verdict_trace() for the actual logic.
         """
+        result = self.safe_verdict_trace(intent, policy)
+        
+        # Convert DecisionResult → Verdict for backward compatibility
         checks = []
         quote_data = None
-        
-        # ── Step 1: Check supported route ─────────────────────────
-        try:
-            routes_result = self.get_routes()
-            route_list = routes_result.get("data", {}).get("routes", [])
-            from_id = int(intent.from_chain_id())
-            to_id = int(intent.to_chain_id())
-            
-            if route_list:
-                matching = [r for r in route_list
-                            if r.get("fromChainId") == from_id and r.get("toChainId") == to_id
-                            and r.get("fromToken", {}).get("address", "").lower() == intent.from_token_address().lower()]
-                route_supported = len(matching) > 0
-            else:
-                route_supported = True  # Assume supported if can't verify
-            
+        for step in result.steps:
+            if step.name in ("Parse Intent", "Parse Policy"):
+                continue
             checks.append({
-                "name": "Route Supported",
-                "passed": route_supported,
-                "detail": f"{intent.from_chain} → {intent.to_chain} ({intent.token.upper()})"
+                "name": step.name,
+                "passed": step.status == "passed",
+                "detail": step.detail
             })
-            
-            if not route_supported:
-                return Verdict(
-                    executable=False,
-                    checks=checks,
-                    reason=f"No supported route found for {intent.from_chain} → {intent.to_chain} ({intent.token.upper()})."
-                )
-        except Exception as e:
-            checks.append({
-                "name": "Route Supported",
-                "passed": False,
-                "detail": f"Error checking route: {e}"
-            })
-            return Verdict(executable=False, checks=checks, reason=f"Failed to check route: {e}")
+            if step.mcp_result and step.mcp_tool == "request-quote":
+                quote_data = step.mcp_result
         
-        # ── Step 2: Check route health (if policy requires) ───────
-        if policy.require_healthy_route:
-            try:
-                health_result = self.check_route_health(intent.from_chain, intent.to_chain)
-                health_data = health_result.get("data", {})
-                status = health_data.get("status", "unknown")
-                is_healthy = status.lower() in ["healthy", "ok", "good"]
-                
-                checks.append({
-                    "name": "Route Health",
-                    "passed": is_healthy,
-                    "detail": f"Status: {status.upper()}"
-                })
-                
-                if not is_healthy:
-                    return Verdict(
-                        executable=False,
-                        checks=checks,
-                        reason=f"Route health check failed. Status: {status}. The agent refuses to prepare the order."
-                    )
-            except Exception as e:
-                checks.append({
-                    "name": "Route Health",
-                    "passed": False,
-                    "detail": f"Error checking health: {e}"
-                })
-                return Verdict(executable=False, checks=checks, reason=f"Failed to check route health: {e}")
-        else:
-            checks.append({
-                "name": "Route Health",
-                "passed": True,
-                "detail": "Skipped (not required by policy)"
-            })
-        
-        # ── Step 3: Get quote ─────────────────────────────────────
-        try:
-            args = {
-                "fromChain": intent.from_chain_id(),
-                "toChain": intent.to_chain_id(),
-                "fromToken": intent.from_token_address(),
-                "toToken": intent.to_token_address(),
-                "amount": amount_to_raw(intent.amount, intent.token),
-                "userAddress": intent.address,
-            }
-            result = self.mcp.call("request-quote", args)
-            
-            if "error" in result:
-                checks.append({
-                    "name": "Quote Received",
-                    "passed": False,
-                    "detail": result.get("error", "Unknown error")
-                })
-                return Verdict(executable=False, checks=checks, reason=f"Failed to get quote: {result.get('error', 'Unknown error')}")
-            
-            quote_data = result.get("data", {})
-            quotes = quote_data.get("quotes", [])
-            
-            if not quotes:
-                checks.append({
-                    "name": "Quote Received",
-                    "passed": False,
-                    "detail": "No quotes returned"
-                })
-                return Verdict(executable=False, checks=checks, reason="No quotes available for this route.")
-            
-            q = quotes[0]
-            output_amount = q.get("outputAmount", "0")
-            quote_id = q.get("quoteId", "")
-            
-            checks.append({
-                "name": "Quote Received",
-                "passed": True,
-                "detail": f"Output: {output_amount}, Quote ID: {quote_id[:16]}..."
-            })
-            
-        except Exception as e:
-            checks.append({
-                "name": "Quote Received",
-                "passed": False,
-                "detail": f"Error getting quote: {e}"
-            })
-            return Verdict(executable=False, checks=checks, reason=f"Failed to get quote: {e}")
-        
-        # ── Step 4: Calculate fee ─────────────────────────────────
-        fee_pct = self._calc_fee(intent.amount, output_amount, intent.token)
-        fee_pct_float = float(fee_pct) if fee_pct else 999.0
-        
-        checks.append({
-            "name": "Fee Calculated",
-            "passed": True,
-            "detail": f"Fee: {fee_pct}%"
-        })
-        
-        # ── Step 5: Check policy constraints ──────────────────────
-        policy_passed = True
-        policy_reason = ""
-        
-        # Check max fee
-        if policy.max_fee_pct is not None:
-            fee_ok = fee_pct_float <= policy.max_fee_pct
-            checks.append({
-                "name": "Fee Policy",
-                "passed": fee_ok,
-                "detail": f"Fee {fee_pct}% {'≤' if fee_ok else '>'} limit {policy.max_fee_pct}%"
-            })
-            if not fee_ok:
-                policy_passed = False
-                policy_reason = f"The quote fee is {fee_pct}%, which exceeds the user limit of {policy.max_fee_pct}%."
-        
-        # Check min output
-        if policy.min_output_amount is not None:
-            output_float = normalize_output_amount(output_amount, intent.amount, intent.token)
-            output_ok = output_float >= policy.min_output_amount
-            checks.append({
-                "name": "Output Policy",
-                "passed": output_ok,
-                "detail": f"Output {output_float:.4f} {'≥' if output_ok else '<'} min {policy.min_output_amount}"
-            })
-            if not output_ok:
-                policy_passed = False
-                policy_reason = f"Output {output_float:.4f} is below minimum {policy.min_output_amount}."
-        
-        # Check avoid chains (both source and destination)
-        if policy.avoid_chains:
-            avoided = []
-            if intent.from_chain in policy.avoid_chains:
-                avoided.append(f"source chain {intent.from_chain}")
-            if intent.to_chain in policy.avoid_chains:
-                avoided.append(f"target chain {intent.to_chain}")
-            if avoided:
-                checks.append({
-                    "name": "Avoid Chains",
-                    "passed": False,
-                    "detail": f"{', '.join(avoided)} in avoid list: {', '.join(policy.avoid_chains)}"
-                })
-                policy_passed = False
-                policy_reason = f"{avoided[0].title()} is in the avoid list."
-            else:
-                checks.append({
-                    "name": "Avoid Chains",
-                    "passed": True,
-                    "detail": f"Neither {intent.from_chain} nor {intent.to_chain} in avoid list"
-                })
-        
-        # Check cross-chain allowance
-        if not policy.allow_cross_chain and intent.from_chain != intent.to_chain:
-            checks.append({
-                "name": "Cross-Chain",
-                "passed": False,
-                "detail": f"Cross-chain transfer not allowed by policy"
-            })
-            policy_passed = False
-            policy_reason = "Cross-chain transfer is not allowed by policy."
-        elif not policy.allow_cross_chain:
-            checks.append({
-                "name": "Cross-Chain",
-                "passed": True,
-                "detail": "Same-chain transfer allowed"
-            })
-        
-        # Check require quote
-        if not policy.require_quote and not quotes:
-            checks.append({
-                "name": "Quote Required",
-                "passed": True,
-                "detail": "No quote required by policy"
-            })
-        
-        # ── Step 6: Final Verdict ─────────────────────────────────
-        if policy_passed:
-            reason_parts = [f"This intent satisfies the user policy."]
-            if fee_pct:
-                reason_parts.append(f"Fee {fee_pct}% is within acceptable limits.")
-            if policy.prefer_cheapest:
-                reason_parts.append("Route selected based on cheapest option.")
-            
-            return Verdict(
-                executable=True,
-                checks=checks,
-                reason=" ".join(reason_parts),
-                quote_data=quote_data
-            )
-        else:
-            return Verdict(
-                executable=False,
-                checks=checks,
-                reason=f"{policy_reason} The agent refuses to prepare the order.",
-                quote_data=quote_data
-            )
+        return Verdict(
+            executable=(result.verdict == "EXECUTABLE"),
+            checks=checks,
+            reason=result.reason,
+            quote_data=quote_data
+        )
 
     def safe_verdict_trace(self, intent: Intent, policy: Policy) -> DecisionResult:
         """Execute Safe Verdict with full decision trace.

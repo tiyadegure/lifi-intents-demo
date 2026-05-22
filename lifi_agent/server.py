@@ -284,7 +284,7 @@ async def explain_intent(request: Request):
         return JSONResponse({"error": "No intent text provided"}, status_code=400)
     
     try:
-        result = agent.explain(text)
+        result = await asyncio.to_thread(agent.explain, text)
         return result
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -691,9 +691,9 @@ function resetColumns(){
 
 function renderIntent(intent){
   const j={amount:intent.amount,token:intent.token,from_chain:intent.from_chain,to_chain:intent.to_chain};
-  const formatted=JSON.stringify(j,null,2)
-    .replace(/"([^"]+)"/g,'<span class="json-key">"$1"</span>')
-    .replace(/: "([^"]*?)"/g,': <span class="json-str">"$1"</span>')
+  const formatted=escapeHtml(JSON.stringify(j,null,2))
+    .replace(/&quot;([^&]+)&quot;/g,'<span class="json-key">"$1"</span>')
+    .replace(/: &quot;([^&]*?)&quot;/g,': <span class="json-str">"$1"</span>')
     .replace(/: (\d+)/g,': <span class="json-num">$1</span>');
   document.getElementById('intentContent').innerHTML='<div class="intent-json">'+formatted+'</div>';
 }

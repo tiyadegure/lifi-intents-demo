@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 MCP_URL = "https://intents-mcp.li.fi/mcp"
 CACHE_TTL = 300  # 5 min cache
+MAX_CACHE_SIZE = 200  # Max cache entries
 MIN_CALL_INTERVAL = 1.0  # Rate limit: min 1s between calls
 
 
@@ -38,11 +39,16 @@ class MCPClient:
         self._rate_lock_sync = threading.Lock()
 
     def _cleanup_cache(self):
-        """Remove expired cache entries."""
+        """Remove expired cache entries and enforce max size."""
         now = time.time()
         expired = [k for k, (ts, _) in self._cache.items() if now - ts >= CACHE_TTL]
         for k in expired:
             del self._cache[k]
+        # Enforce max cache size (keep most recent)
+        if len(self._cache) > MAX_CACHE_SIZE:
+            sorted_keys = sorted(self._cache.keys(), key=lambda k: self._cache[k][0])
+            for k in sorted_keys[:len(self._cache) - MAX_CACHE_SIZE]:
+                del self._cache[k]
 
     @property
     def client(self) -> httpx.Client:
