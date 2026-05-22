@@ -14,7 +14,7 @@ import time
 import sqlite3
 import logging
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
 from pathlib import Path
 from datetime import datetime
@@ -263,6 +263,10 @@ class Policy:
     require_healthy_route: bool = False         # require route health check
     min_output_amount: Optional[float] = None   # minimum output amount
     max_slippage: Optional[float] = None        # max slippage percentage
+    allow_cross_chain: bool = True              # allow cross-chain transfers
+    avoid_chains: List[str] = field(default_factory=list)  # chains to avoid
+    prefer_cheapest: bool = False               # prefer cheapest route
+    require_quote: bool = True                  # require quote to execute
     
     def __repr__(self):
         parts = []
@@ -274,6 +278,14 @@ class Policy:
             parts.append(f"output>={self.min_output_amount}")
         if self.max_slippage is not None:
             parts.append(f"slippage<{self.max_slippage}%")
+        if not self.allow_cross_chain:
+            parts.append("no cross-chain")
+        if self.avoid_chains:
+            parts.append(f"avoid {', '.join(self.avoid_chains)}")
+        if self.prefer_cheapest:
+            parts.append("prefer cheapest")
+        if not self.require_quote:
+            parts.append("allow no quote")
         return f"Policy({', '.join(parts) if parts else 'no constraints'})"
 
 
@@ -296,8 +308,12 @@ def parse_policy(text: str) -> Policy:
         "send 10 USDC from Base to Arbitrum only if fee < 0.5%"
         "bridge 50 USDT if route is healthy and fee < 1%"
         "transfer 0.5 ETH if output >= 0.49"
+        "avoid Ethereum"
+        "prefer cheapest route"
+        "do not execute if no quote"
     """
     policy = Policy()
+    text_lower = text.lower()
     
     # Extract fee limit: "fee < 0.5%", "fee under 1%", "max fee 0.3%"
     fee_match = re.search(r'(?:fee|fees?)\s*(?:<|<=|under|below|max(?:imum)?)\s*(\d+\.?\d*)\s*%', text)
@@ -305,9 +321,9 @@ def parse_policy(text: str) -> Policy:
         policy.max_fee_pct = float(fee_match.group(1))
     
     # Extract route health requirement: "if route is healthy", "healthy route"
-    if re.search(r'(?:route|routes?)\s*(?:is|are)?\s*healthy', text):
+    if re.search(r'(?:route|routes?)\s*(?:is|are)?\s*healthy', text_lower):
         policy.require_healthy_route = True
-    if re.search(r'healthy\s*(?:route|routes?)', text):
+    if re.search(r'healthy\s*(?:route|routes?)', text_lower):
         policy.require_healthy_route = True
     
     # Extract minimum output: "output >= 9.95", "min output 9.9"
@@ -319,6 +335,37 @@ def parse_policy(text: str) -> Policy:
     slippage_match = re.search(r'slippage\s*(?:<|<=|under|below|max(?:imum)?)\s*(\d+\.?\d*)\s*%', text)
     if slippage_match:
         policy.max_slippage = float(slippage_match.group(1))
+    
+    # Extract avoid chains: "avoid Ethereum", "avoid eth and polygon"
+    avoid_match = re.search(r'avoid\s+([\w\s,]+?)(?:\s+and\s+|\s*,\s*|\s*$)', text_lower)
+    if avoid_match:
+        chains_str = avoid_match.group(1)
+        # Split by "and" or comma
+        chains = re.split(r'\s+and\s+|\s*,\s*', chains_str)
+        for chain in chains:
+            chain = chain.strip()
+            if chain in CHAIN_ALIASES:
+                policy.avoid_chains.append(CHAIN_ALIASES[chain])
+            elif chain in CHAINS:
+                policy.avoid_chains.append(chain)
+    
+    # Extract prefer cheapest: "prefer cheapest route", "cheapest route"
+    if re.search(r'prefer\s+cheapest(?:\s+route)?', text_lower):
+        policy.prefer_cheapest = True
+    if re.search(r'cheapest\s+route', text_lower):
+        policy.prefer_cheapest = True
+    
+    # Extract no quote requirement: "do not execute if no quote", "no quote = no execute"
+    if re.search(r'do\s+not\s+execute\s+if\s+no\s+quote', text_lower):
+        policy.require_quote = True
+    if re.search(r'no\s+quote\s*=\s*no\s+execute', text_lower):
+        policy.require_quote = True
+    
+    # Extract no cross-chain: "same chain only", "no cross-chain"
+    if re.search(r'same\s+chain\s+only', text_lower):
+        policy.allow_cross_chain = False
+    if re.search(r'no\s+cross[- ]chain', text_lower):
+        policy.allow_cross_chain = False
     
     return policy
 
@@ -759,12 +806,59 @@ class LifAgent:
                 policy_passed = False
                 policy_reason = f"Output {output_amount} is below minimum {policy.min_output_amount}."
         
+        # Check avoid chains
+        if policy.avoid_chains:
+            if intent.to_chain in policy.avoid_chains:
+                checks.append({
+                    "name": "Avoid Chains",
+                    "passed": False,
+                    "detail": f"Target chain {intent.to_chain} is in avoid list: {', '.join(policy.avoid_chains)}"
+                })
+                policy_passed = False
+                policy_reason = f"Target chain {intent.to_chain} is in the avoid list."
+            else:
+                checks.append({
+                    "name": "Avoid Chains",
+                    "passed": True,
+                    "detail": f"Target chain {intent.to_chain} is not in avoid list"
+                })
+        
+        # Check cross-chain allowance
+        if not policy.allow_cross_chain and intent.from_chain != intent.to_chain:
+            checks.append({
+                "name": "Cross-Chain",
+                "passed": False,
+                "detail": f"Cross-chain transfer not allowed by policy"
+            })
+            policy_passed = False
+            policy_reason = "Cross-chain transfer is not allowed by policy."
+        elif not policy.allow_cross_chain:
+            checks.append({
+                "name": "Cross-Chain",
+                "passed": True,
+                "detail": "Same-chain transfer allowed"
+            })
+        
+        # Check require quote
+        if not policy.require_quote and not quotes:
+            checks.append({
+                "name": "Quote Required",
+                "passed": True,
+                "detail": "No quote required by policy"
+            })
+        
         # ── Step 6: Final Verdict ─────────────────────────────────
         if policy_passed:
+            reason_parts = [f"This intent satisfies the user policy."]
+            if fee_pct:
+                reason_parts.append(f"Fee {fee_pct}% is within acceptable limits.")
+            if policy.prefer_cheapest:
+                reason_parts.append("Route selected based on cheapest option.")
+            
             return Verdict(
                 executable=True,
                 checks=checks,
-                reason=f"This intent satisfies the user policy. Fee {fee_pct}% is within acceptable limits.",
+                reason=" ".join(reason_parts),
                 quote_data=quote_data
             )
         else:
