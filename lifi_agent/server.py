@@ -382,9 +382,14 @@ async def index():
   .btn:hover{box-shadow:0 4px 20px var(--glow);transform:translateY(-1px)}
   .btn:active{transform:translateY(0)}
   .btn:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none}
-  .examples{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
-  .example-btn{background:var(--surface);border:1px solid var(--border-subtle);color:var(--text2);padding:5px 12px;border-radius:16px;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s}
-  .example-btn:hover{border-color:var(--accent);color:var(--text)}
+  .preset-section{margin-top:12px}
+  .preset-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px}
+  .presets{display:flex;gap:8px;flex-wrap:wrap}
+  .preset-btn{background:var(--surface);border:1px solid var(--border-subtle);color:var(--text2);padding:6px 14px;border-radius:16px;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s;font-weight:500}
+  .preset-btn.safe:hover{border-color:var(--green-border);color:var(--green);background:var(--green-bg)}
+  .preset-btn.refuse:hover{border-color:var(--red-border);color:var(--red);background:var(--red-bg)}
+  .preset-btn.safe.active{border-color:var(--green-border);color:var(--green);background:var(--green-bg)}
+  .preset-btn.refuse.active{border-color:var(--red-border);color:var(--red);background:var(--red-bg)}
 
   /* Three Column Layout */
   .columns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:24px}
@@ -503,10 +508,16 @@ async def index():
              value="send 10 USDC from Base to Arbitrum only if fee < 0.5%">
       <button class="btn" id="analyzeBtn" onclick="analyzeIntent()">Analyze</button>
     </div>
-    <div class="examples">
-      <button class="example-btn" onclick="setExample(this)">send 5 USDC from Ethereum to Optimism</button>
-      <button class="example-btn" onclick="setExample(this)">send 100 USDC from Arbitrum to Base only if fee < 1%</button>
-      <button class="example-btn" onclick="setExample(this)">send 10 USDT from Polygon to Avalanche min output 9.5</button>
+    <div class="preset-section">
+      <div class="preset-label">Preset Scenarios</div>
+      <div class="presets">
+        <button class="preset-btn safe" onclick="setPreset(this,'send 10 USDC from Base to Arbitrum')">🟢 Safe Transfer</button>
+        <button class="preset-btn refuse" onclick="setPreset(this,'send 10 USDC from Base to Arbitrum only if fee < 0.01%')">🔴 Fee Too High</button>
+        <button class="preset-btn safe" onclick="setPreset(this,'send 10 USDC from Base to Arbitrum require healthy route')">🟢 Healthy Route</button>
+        <button class="preset-btn refuse" onclick="setPreset(this,'send 10 USDC from Base to Arbitrum avoid Base')">🔴 Avoid Chain</button>
+        <button class="preset-btn safe" onclick="setPreset(this,'send 10 USDC from Base to Arbitrum min output 9.5')">🟢 Min Output</button>
+        <button class="preset-btn refuse" onclick="setPreset(this,'send 10 USDC from Base to Arbitrum min output 100')">🔴 Min Too High</button>
+      </div>
     </div>
   </div>
 
@@ -594,9 +605,12 @@ async def index():
 <script>
 function escapeHtml(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
 
-function setExample(btn){
-  document.getElementById('intentInput').value=btn.textContent;
+function setPreset(btn,value){
+  document.getElementById('intentInput').value=value;
   document.getElementById('intentInput').focus();
+  // Highlight active preset
+  document.querySelectorAll('.preset-btn').forEach(function(b){b.classList.remove('active')});
+  btn.classList.add('active');
 }
 
 async function analyzeIntent(){

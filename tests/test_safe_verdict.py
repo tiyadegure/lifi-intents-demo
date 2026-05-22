@@ -166,6 +166,28 @@ class TestSafeVerdictAvoidChains:
         verdict = agent.safe_verdict(intent, policy)
         assert verdict.executable is False
 
+    def test_avoid_source_chain_refused(self):
+        """source is in avoid list → REFUSED"""
+        agent = _make_agent()
+        _mock_mcp_routes(agent)
+
+        intent = Intent("base", "arbitrum", "usdc", "10")
+        policy = Policy(avoid_chains=["base"])
+
+        verdict = agent.safe_verdict(intent, policy)
+        assert verdict.executable is False
+
+    def test_avoid_both_chains_refused(self):
+        """both source and target in avoid list → REFUSED"""
+        agent = _make_agent()
+        _mock_mcp_routes(agent)
+
+        intent = Intent("base", "arbitrum", "usdc", "10")
+        policy = Policy(avoid_chains=["base", "arbitrum"])
+
+        verdict = agent.safe_verdict(intent, policy)
+        assert verdict.executable is False
+
     def test_avoid_other_chain_executable(self):
         """avoid list doesn't include target → EXECUTABLE"""
         agent = _make_agent()

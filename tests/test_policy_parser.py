@@ -46,6 +46,16 @@ class TestParsePolicyOutput:
         p = parse_policy("transfer if output at least 9.9")
         assert p.min_output_amount == 9.9
 
+    def test_min_output_no_operator(self):
+        """min output 9.5 without >= operator → should parse as 9.5"""
+        p = parse_policy("send 10 USDC from Base to Arbitrum min output 9.5")
+        assert p.min_output_amount == 9.5
+
+    def test_min_output_integer_no_operator(self):
+        """min output 100 without operator → should parse as 100"""
+        p = parse_policy("send 10 USDC from Base to Arbitrum min output 100")
+        assert p.min_output_amount == 100.0
+
     def test_no_output(self):
         p = parse_policy("send 10 USDC from Base to Arbitrum")
         assert p.min_output_amount is None

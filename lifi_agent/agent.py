@@ -385,9 +385,9 @@ def parse_policy(text: str) -> Policy:
     if re.search(r'healthy\s*(?:route|routes?)', text_lower):
         policy.require_healthy_route = True
     
-    # Extract minimum output: "output >= 9.95", "min output 9.9"
-    output_match = re.search(r'(?:output|min(?:imum)?\s*output)\s*(?:>=|>|at\s*least)\s*(\d+\.?\d*)', text)
-    if output_match:
+    # Extract minimum output: "output >= 9.95", "min output 9.9", "min output 100"
+    output_match = re.search(r'(?:output|min(?:imum)?\s*output)\s*(?:>=|>|at\s*least)?\s*(\d+\.?\d*)', text)
+    if output_match and output_match.group(1):
         policy.min_output_amount = float(output_match.group(1))
     
     # Extract slippage: "slippage < 0.5%", "max slippage 1%"
@@ -865,21 +865,26 @@ class LifAgent:
                 policy_passed = False
                 policy_reason = f"Output {output_float:.4f} is below minimum {policy.min_output_amount}."
         
-        # Check avoid chains
+        # Check avoid chains (both source and destination)
         if policy.avoid_chains:
+            avoided = []
+            if intent.from_chain in policy.avoid_chains:
+                avoided.append(f"source chain {intent.from_chain}")
             if intent.to_chain in policy.avoid_chains:
+                avoided.append(f"target chain {intent.to_chain}")
+            if avoided:
                 checks.append({
                     "name": "Avoid Chains",
                     "passed": False,
-                    "detail": f"Target chain {intent.to_chain} is in avoid list: {', '.join(policy.avoid_chains)}"
+                    "detail": f"{', '.join(avoided)} in avoid list: {', '.join(policy.avoid_chains)}"
                 })
                 policy_passed = False
-                policy_reason = f"Target chain {intent.to_chain} is in the avoid list."
+                policy_reason = f"{avoided[0].title()} is in the avoid list."
             else:
                 checks.append({
                     "name": "Avoid Chains",
                     "passed": True,
-                    "detail": f"Target chain {intent.to_chain} is not in avoid list"
+                    "detail": f"Neither {intent.from_chain} nor {intent.to_chain} in avoid list"
                 })
         
         # Check cross-chain allowance
@@ -1197,22 +1202,27 @@ class LifAgent:
                 policy_passed = False
                 policy_reason = f"Output {output_float:.4f} is below minimum {policy.min_output_amount}."
         
-        # Check avoid chains
+        # Check avoid chains (both source and destination)
         if policy.avoid_chains:
+            avoided = []
+            if intent.from_chain in policy.avoid_chains:
+                avoided.append(f"source chain {intent.from_chain}")
             if intent.to_chain in policy.avoid_chains:
+                avoided.append(f"target chain {intent.to_chain}")
+            if avoided:
                 steps.append(DecisionStep(
                     name="Avoid Chains",
                     status="failed",
-                    detail=f"Target chain {intent.to_chain} is in avoid list: {', '.join(policy.avoid_chains)}",
+                    detail=f"{', '.join(avoided)} in avoid list: {', '.join(policy.avoid_chains)}",
                     duration_ms=0
                 ))
                 policy_passed = False
-                policy_reason = f"Target chain {intent.to_chain} is in the avoid list."
+                policy_reason = f"{avoided[0].title()} is in the avoid list."
             else:
                 steps.append(DecisionStep(
                     name="Avoid Chains",
                     status="passed",
-                    detail=f"Target chain {intent.to_chain} is not in avoid list",
+                    detail=f"Neither {intent.from_chain} nor {intent.to_chain} in avoid list",
                     duration_ms=0
                 ))
         
