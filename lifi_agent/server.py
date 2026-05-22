@@ -213,6 +213,12 @@ async def recent_orders():
     return result
 
 
+@app.get("/api/stats")
+async def get_stats():
+    from lifi_agent.agent import quote_store
+    return quote_store.get_stats()
+
+
 # ── Web UI ──────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
@@ -494,6 +500,33 @@ async def index():
     <div id="recentOrders" style="margin-top:16px">
       <div class="analytics-section-title">Recent Orders</div>
       <p class="empty-state">Loading recent orders...</p>
+    </div>
+  </div>
+
+  <!-- Quote Statistics -->
+  <div class="panel">
+    <h3>📊 Quote Statistics <span class="badge" id="statsBadge">—</span></h3>
+    <div id="statsResult" class="analytics-grid">
+      <div class="analytics-card" style="animation-delay:0s">
+        <span class="analytics-icon">📈</span>
+        <div class="analytics-value" id="statTotal">—</div>
+        <div class="analytics-label">Total Quotes</div>
+      </div>
+      <div class="analytics-card" style="animation-delay:.06s">
+        <span class="analytics-icon">💰</span>
+        <div class="analytics-value" id="statAvgFee">—</div>
+        <div class="analytics-label">Avg Fee</div>
+      </div>
+      <div class="analytics-card" style="animation-delay:.12s">
+        <span class="analytics-icon">🏆</span>
+        <div class="analytics-value" id="statTopRoute">—</div>
+        <div class="analytics-label">Top Route</div>
+      </div>
+      <div class="analytics-card" style="animation-delay:.18s">
+        <span class="analytics-icon">🪙</span>
+        <div class="analytics-value" id="statTopToken">—</div>
+        <div class="analytics-label">Top Token</div>
+      </div>
     </div>
   </div>
 
@@ -860,6 +893,31 @@ async function loadRecentOrders() {
 }
 
 loadRecentOrders();
+
+// Load quote statistics
+async function loadStats() {
+  try {
+    const res = await fetch('/api/stats');
+    const data = await res.json();
+    document.getElementById('statTotal').textContent = data.total || 0;
+    document.getElementById('statAvgFee').textContent = data.avg_fee ? data.avg_fee.toFixed(3) + '%' : '—';
+    
+    if (data.top_routes && data.top_routes.length > 0) {
+      const [from, to, count] = data.top_routes[0];
+      document.getElementById('statTopRoute').textContent = `${from}→${to}`;
+      document.getElementById('statsBadge').textContent = `${data.total} quotes`;
+    }
+    
+    if (data.top_tokens && data.top_tokens.length > 0) {
+      const [token, count] = data.top_tokens[0];
+      document.getElementById('statTopToken').textContent = token.toUpperCase();
+    }
+  } catch (e) {
+    console.error('Failed to load stats:', e);
+  }
+}
+
+loadStats();
 </script>
 </body>
 </html>"""
