@@ -15,11 +15,11 @@ LI.FI Intents × AI Agent: Safe Verdict — 策略驱动的跨链安全裁决
 
 ## 核心功能：Safe Verdict
 ```
-用户输入: "send 10 USDC from Base to Arbitrum only if fee < 0.5%"
+用户输入: "send 10 USDC from Base to Arbitrum only if fee < 0.5% avoid Ethereum"
 
 解析结果:
   - Intent: 10 USDC base → arbitrum
-  - Policy: fee < 0.5%
+  - Policy: fee < 0.5%, avoid ethereum
 
 Safe Verdict Pipeline:
   ✓ Route Supported: base → arbitrum (USDC)
@@ -27,12 +27,23 @@ Safe Verdict Pipeline:
   ✓ Quote Received: Output: 9.98 USDC
   ✓ Fee Calculated: 0.18%
   ✓ Fee Policy: Fee 0.18% ≤ limit 0.5%
+  ✓ Avoid Chains: Target chain arbitrum is not in avoid list
 
 Verdict: EXECUTABLE
 
 Reason:
   This intent satisfies the user policy. Fee 0.18% is within acceptable limits.
 ```
+
+## 支持的自然语言策略
+- **费用限制**: "only if fee < 0.5%", "fee under 1%", "max fee 0.3%"
+- **路由健康**: "only if route is healthy", "healthy route"
+- **避免链**: "avoid Ethereum", "avoid eth and polygon"
+- **偏好**: "prefer cheapest route", "cheapest route"
+- **报价要求**: "do not execute if no quote", "no quote = no execute"
+- **跨链限制**: "same chain only", "no cross-chain"
+- **输出限制**: "output >= 9.95", "min output 9.9"
+- **滑点限制**: "slippage < 0.5%", "max slippage 1%"
 
 ## 技术架构
 ```
