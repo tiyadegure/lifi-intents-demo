@@ -237,6 +237,22 @@ def raw_to_amount(raw_amount: str, token: str) -> float:
     except (ValueError, OverflowError):
         return 0.0
 
+
+def normalize_output_amount(output_amount: str, input_amount: str, token: str) -> float:
+    """Convert output amount to human-readable, handling both raw and human formats.
+    
+    If output looks like raw units (>1000x input), converts via raw_to_amount.
+    """
+    try:
+        out_str = ''.join(c for c in output_amount if c.isdigit() or c == '.')
+        out_raw = float(out_str)
+        inp = float(input_amount)
+        if out_raw > inp * 1000:
+            return raw_to_amount(output_amount, token)
+        return out_raw
+    except (ValueError, ZeroDivisionError):
+        return 0.0
+
 # Configurable demo address (set DEMO_ADDRESS env var for production)
 DEMO_ADDRESS = os.environ.get("DEMO_ADDRESS", "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045")
 
@@ -838,12 +854,12 @@ class LifAgent:
         
         # Check min output
         if policy.min_output_amount is not None:
-            output_float = float(output_amount) if output_amount else 0
+            output_float = normalize_output_amount(output_amount, intent.amount, intent.token)
             output_ok = output_float >= policy.min_output_amount
             checks.append({
                 "name": "Output Policy",
                 "passed": output_ok,
-                "detail": f"Output {output_amount} {'≥' if output_ok else '<'} min {policy.min_output_amount}"
+                "detail": f"Output {output_float:.4f} {'≥' if output_ok else '<'} min {policy.min_output_amount}"
             })
             if not output_ok:
                 policy_passed = False
@@ -1169,12 +1185,12 @@ class LifAgent:
         
         # Check min output
         if policy.min_output_amount is not None:
-            output_float = float(output_amount) if output_amount else 0
+            output_float = normalize_output_amount(output_amount, intent.amount, intent.token)
             output_ok = output_float >= policy.min_output_amount
             steps.append(DecisionStep(
                 name="Output Policy",
                 status="passed" if output_ok else "failed",
-                detail=f"Output {output_amount} {'≥' if output_ok else '<'} min {policy.min_output_amount}",
+                detail=f"Output {output_float:.4f} {'≥' if output_ok else '<'} min {policy.min_output_amount}",
                 duration_ms=0
             ))
             if not output_ok:
@@ -1293,16 +1309,7 @@ class LifAgent:
         """
         try:
             inp = float(input_amount)
-            # Try to detect if output is raw (large integer) vs human-readable
-            out_str = ''.join(c for c in output_amount if c.isdigit() or c == '.')
-            out_raw = float(out_str)
-            
-            # If output looks like a raw amount (> 1000x input), convert it
-            if out_raw > inp * 1000:
-                out_human = raw_to_amount(output_amount, token)
-            else:
-                out_human = out_raw
-            
+            out_human = normalize_output_amount(output_amount, input_amount, token)
             if inp == 0:
                 return None
             fee = (inp - out_human) / inp * 100

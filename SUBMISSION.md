@@ -19,24 +19,41 @@ LI.FI Intents × AI Agent: Safe Verdict — 策略驱动的跨链安全裁决
 
 ## 核心功能：Solver-Aware Checks
 ```
-命令: solver base arbitrum USDC USDC
+命令: python -m lifi_agent solver base arbitrum USDC USDC
 
 输出:
   Route: base → arbitrum
 
   Checks:
-    ✗ Route Health: UNKNOWN
+    ✓ Route Health: HEALTHY
+      latency: 120ms
+      active_solvers: 3
     ✓ Quote Availability: AVAILABLE
-    ✗ Solver Inventory: EMPTY
-      quote_count: 0
-      quotes: []
+      quote_count: 2
+    ✓ Solver Inventory: ACTIVE
+      quotes: 2 standing quotes found
 
   Summary:
     Total checks: 3
-    Passed: 1
-    Failed: 2
+    Passed: 3
+    Overall: HEALTHY
+```
+
+When solver liquidity drops or a route becomes unavailable, the same tool
+degrades gracefully:
+
+```
+  Checks:
+    ✗ Route Health: UNREACHABLE
+    ✓ Quote Availability: AVAILABLE
+    ✗ Solver Inventory: EMPTY
+
+  Summary:
     Overall: DEGRADED
 ```
+
+This makes it a diagnostic tool for developers building on LI.FI Intents —
+you can see exactly which layer is failing.
 
 ## Solver-Aware Checks 数据结构
 ```python
