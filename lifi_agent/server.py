@@ -195,6 +195,20 @@ async def index():
   .compare-table tbody tr:first-child td{color:var(--green);font-weight:600}
   .compare-table tbody tr:first-child td:first-child::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);margin-right:8px;vertical-align:middle}
   .compare-fee{font-variant-numeric:tabular-nums}
+  .compare-table tbody tr.winner td{background:var(--green-dim);border-left:2px solid var(--green)}
+  /* Copy button */
+  .copy-btn{background:none;border:1px solid var(--border);color:var(--text-muted);cursor:pointer;padding:2px 8px;border-radius:4px;font-size:11px;margin-left:8px;transition:all .15s;font-family:inherit}
+  .copy-btn:hover{border-color:var(--accent);color:var(--text-primary)}
+  .copy-btn.copied{border-color:var(--green);color:var(--green)}
+  /* Trace dedup badge */
+  .trace-count{background:var(--red-dim);color:var(--red);font-size:10px;padding:1px 6px;border-radius:10px;margin-left:6px;font-weight:600}
+  /* How it works */
+  .how-it-works{margin-top:20px;padding:20px 24px;text-align:center}
+  .how-it-works h3{color:var(--text-secondary);font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:14px}
+  .flow-steps{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--text-secondary)}
+  .flow-step{display:flex;align-items:center;gap:5px;background:var(--bg-card);padding:6px 12px;border-radius:6px;border:1px solid var(--border-subtle)}
+  .flow-step .icon{font-size:15px}
+  .flow-arrow{color:var(--text-muted);font-size:14px}
   /* Loading spinner */
   .loading{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle}
   @keyframes spin{to{transform:rotate(360deg)}}
@@ -267,6 +281,21 @@ async def index():
     <h3>Route Comparison</h3>
     <div id="compareResult">
       <p class="empty-state">Click "Compare" to see quotes across multiple destination chains.</p>
+    </div>
+  </div>
+
+  <div class="panel how-it-works">
+    <h3>How It Works</h3>
+    <div class="flow-steps">
+      <span class="flow-step"><span class="icon">💬</span> User Input</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step"><span class="icon">🤖</span> AI Agent</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step"><span class="icon">🔌</span> MCP Server</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step"><span class="icon">🔗</span> LI.FI Intents</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step"><span class="icon">⛓️</span> Cross-chain</span>
     </div>
   </div>
 
@@ -356,7 +385,7 @@ function renderQuote(data, intent) {
     '<div class="quote-card quote-card-highlight">' +
       '<div class="quote-card-inner"><div class="label">You Receive</div>' +
       '<div class="value">' + q.outputAmount + '</div>' +
-      '<div class="meta">Quote ID: ' + q.quoteId + '</div></div>' +
+      '<div class="meta">Quote ID: ' + q.quoteId + ' <button class="copy-btn" onclick="copyQuoteId(\'' + q.quoteId + '\',this)">Copy</button></div></div>' +
     '</div>';
 }
 
@@ -386,10 +415,15 @@ function renderCompare(results, intent) {
     el.innerHTML = '<p class="empty-state">No quotes available for comparison.</p>';
     return;
   }
+  let maxIdx = 0;
+  results.forEach((r, i) => {
+    if (parseFloat(r.output) > parseFloat(results[maxIdx].output)) maxIdx = i;
+  });
   let html = '<table class="compare-table"><thead><tr><th>Destination</th><th>Output</th><th>Fee</th></tr></thead><tbody>';
   results.forEach((r, i) => {
     const feeAbs = Math.abs(parseFloat(r.fee_pct)).toFixed(2);
-    html += '<tr><td>' + capitalize(intent.from) + ' → ' + capitalize(r.chain) + '</td><td>' + r.output + '</td><td class="compare-fee">~' + feeAbs + '%</td></tr>';
+    const cls = i === maxIdx ? ' class="winner"' : '';
+    html += '<tr' + cls + '><td>' + capitalize(intent.from) + ' → ' + capitalize(r.chain) + '</td><td>' + r.output + '</td><td class="compare-fee">~' + feeAbs + '%</td></tr>';
   });
   html += '</tbody></table>';
   el.innerHTML = html;
@@ -402,16 +436,37 @@ async function refreshTraces() {
     const el = document.getElementById('traces');
     const badge = document.getElementById('traceBadge');
     const traces = data.traces || [];
-    badge.textContent = traces.length + ' steps';
     if (!traces.length) return;
-    el.innerHTML = traces.map(t =>
-      '<div class="trace-item">' +
+    // Deduplicate consecutive steps with same tool and same error
+    const deduped = [];
+    for (const t of traces) {
+      const prev = deduped[deduped.length - 1];
+      const isError = t.result_summary.startsWith('Error');
+      if (prev && prev.tool === t.tool && prev.isError && isError && prev.result_summary === t.result_summary) {
+        prev.count++;
+      } else {
+        deduped.push({ ...t, isError, count: 1 });
+      }
+    }
+    badge.textContent = deduped.length + ' steps' + (deduped.length < traces.length ? ' (' + traces.length + ' total)' : '');
+    el.innerHTML = deduped.map(t => {
+      const dur = t.duration_ms === 0 ? '⚡ cached' : t.duration_ms + 'ms';
+      const countBadge = t.count > 1 ? '<span class="trace-count">×' + t.count + '</span>' : '';
+      return '<div class="trace-item">' +
         '<span class="trace-tool">⚡ ' + t.tool + '</span>' +
-        '<span class="trace-result ' + (t.result_summary.startsWith('Error') ? 'trace-error' : '') + '">' + t.result_summary + '</span>' +
-        '<span class="trace-duration">' + t.duration_ms + 'ms</span>' +
-      '</div>'
-    ).join('');
+        '<span class="trace-result ' + (t.isError ? 'trace-error' : '') + '">' + t.result_summary + countBadge + '</span>' +
+        '<span class="trace-duration">' + dur + '</span>' +
+      '</div>';
+    }).join('');
   } catch (e) {}
+}
+
+function copyQuoteId(id, btn) {
+  navigator.clipboard.writeText(id).then(() => {
+    btn.textContent = 'Copied';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+  });
 }
 
 document.getElementById('intentInput').addEventListener('keydown', e => {
