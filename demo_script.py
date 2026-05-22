@@ -8,7 +8,7 @@ import asyncio
 import json
 import time
 from lifi_agent.mcp_client import MCPClient
-from lifi_agent.agent import parse_intent, Intent
+from lifi_agent.agent import parse_intent, Intent, amount_to_raw
 
 # Demo address (Vitalik's address for demo purposes)
 DEMO_ADDRESS = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"
@@ -47,7 +47,7 @@ async def demo_quote():
         'toChain': intent.to_chain_id(),
         'fromToken': intent.from_token_address(),
         'toToken': intent.to_token_address(),
-        'amount': str(int(float(intent.amount) * 1_000_000)),  # USDC has 6 decimals
+        'amount': amount_to_raw(intent.amount, intent.token),
         'userAddress': DEMO_ADDRESS
     })
     

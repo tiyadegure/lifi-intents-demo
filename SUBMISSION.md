@@ -30,7 +30,7 @@ Solver Network (跨链执行)
 - ✅ MCP 协议集成（LI.FI Intents）
 - ✅ Web UI Dashboard（报价历史、统计面板）
 - ✅ Solver Tools（Route Health、Quote Inventory、Become a Solver）
-- ✅ CLI 交互界面
+- ✅ CLI 交互界面（send、compare、route health、routes、stats 等）
 - ✅ Python SDK（pip install lifi-agent）
 - ✅ 多链报价对比
 - ✅ 交易追踪

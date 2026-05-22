@@ -202,6 +202,27 @@ TOKENS = {
     },
 }
 
+# Token decimals for amount conversion
+TOKEN_DECIMALS = {
+    "usdc": 6,
+    "usdt": 6,
+    "eth": 18,
+    "weth": 18,
+}
+
+def amount_to_raw(human_amount: str, token: str) -> str:
+    """Convert human-readable amount to raw amount with proper decimals.
+    
+    Example: amount_to_raw("10", "usdc") -> "10000000"
+    """
+    decimals = TOKEN_DECIMALS.get(token.lower(), 18)
+    try:
+        amount_float = float(human_amount)
+        raw_amount = int(amount_float * (10 ** decimals))
+        return str(raw_amount)
+    except ValueError:
+        return human_amount
+
 # Configurable demo address (set DEMO_ADDRESS env var for production)
 DEMO_ADDRESS = os.environ.get("DEMO_ADDRESS", "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045")
 
@@ -448,7 +469,7 @@ class LifAgent:
             "toChain": intent.to_chain_id(),
             "fromToken": intent.from_token_address(),
             "toToken": intent.to_token_address(),
-            "amount": intent.amount,
+            "amount": amount_to_raw(intent.amount, intent.token),
             "userAddress": intent.address,
         }
         result = self.mcp.call("request-quote", args)
@@ -616,6 +637,7 @@ def interactive():
     help_table.add_column("Description")
     help_table.add_row("[cyan]send[/cyan] 10 USDC from Base to Arbitrum", "Execute a transfer")
     help_table.add_row("[cyan]compare[/cyan] 10 USDC from Ethereum", "Compare quotes across chains")
+    help_table.add_row("[cyan]route health[/cyan] base arbitrum", "Check route health status")
     help_table.add_row("[cyan]routes[/cyan]", "Show supported routes")
     help_table.add_row("[cyan]orders[/cyan]", "Show recent orders")
     help_table.add_row("[cyan]favorites[/cyan]", "Show saved routes")
@@ -630,7 +652,7 @@ def interactive():
     # ── Auto-completion setup ─────────────────────────────────────
     chain_names = list(CHAINS.keys())
     token_names = ["USDC", "USDT", "ETH"]
-    commands = ["send", "compare", "routes", "orders", "favorites", "wallet",
+    commands = ["send", "compare", "route", "routes", "orders", "favorites", "wallet",
                 "history", "stats", "quit"]
     all_completions = commands + chain_names + token_names + [
         "from", "to", "bridge", "transfer",
@@ -765,6 +787,53 @@ def interactive():
             if msg:
                 console.print(f"  {msg}")
             console.print()
+            continue
+
+        # ── Route health command ──────────────────────────────────
+        if text.startswith("route health") or text.startswith("routehealth"):
+            parts = text.split()
+            if len(parts) < 3:
+                console.print("\n  [yellow]Usage:[/yellow] route health <from_chain> <to_chain>")
+                console.print("  [dim]Example:[/yellow] route health base arbitrum\n")
+                continue
+            from_chain = parts[2]
+            to_chain = parts[3] if len(parts) > 3 else "arbitrum"
+            
+            with Progress(SpinnerColumn(), TextColumn(f"[bold blue]Checking route health: {from_chain} → {to_chain}...[/bold blue]"), transient=True) as progress:
+                progress.add_task("health", total=None)
+                result = agent.check_route_health(from_chain, to_chain)
+            
+            if "error" in result:
+                console.print(f"\n  [red]Error:[/red] {result['error']}\n")
+            else:
+                data = result.get("data", {})
+                status = data.get("status", "unknown")
+                routes = data.get("routes", [])
+                
+                # Status indicator
+                if status == "healthy":
+                    status_icon = "[green]●[/green]"
+                elif status == "degraded":
+                    status_icon = "[yellow]●[/yellow]"
+                else:
+                    status_icon = "[red]●[/red]"
+                
+                console.print(f"\n  {status_icon} Route Health: [bold]{from_chain} → {to_chain}[/bold]")
+                console.print(f"  Status: [bold]{status.upper()}[/bold]")
+                
+                if routes:
+                    table = Table(box=box.SIMPLE, border_style="dim")
+                    table.add_column("Route", style="bold")
+                    table.add_column("Status")
+                    table.add_column("Latency")
+                    for r in routes[:5]:
+                        route_name = f"{r.get('fromChain', '?')} → {r.get('toChain', '?')}"
+                        r_status = r.get("status", "?")
+                        latency = r.get("latency", "?")
+                        table.add_row(route_name, r_status, f"{latency}ms")
+                    console.print(table)
+                
+                console.print()
             continue
 
         if text == "orders":

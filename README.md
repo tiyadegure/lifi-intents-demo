@@ -15,11 +15,24 @@
 
 ### 安装
 ```bash
-pip install lifi-agent
+# 克隆仓库
+git clone https://github.com/tiyadegure/lifi-intents-demo.git
+cd lifi-intents-demo
+
+# 创建虚拟环境
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 安装依赖
+pip install -e .
 ```
 
 ### CLI 使用
 ```bash
+# 激活虚拟环境
+source .venv/bin/activate
+
+# 运行 CLI
 python -m lifi_agent
 
 > send 10 USDC from Base to Arbitrum
@@ -30,6 +43,10 @@ python -m lifi_agent
 
 ### Web UI
 ```bash
+# 安装 Web 依赖
+pip install -e ".[web]"
+
+# 启动服务
 python -m lifi_agent.server
 # 打开 http://localhost:8888
 ```
