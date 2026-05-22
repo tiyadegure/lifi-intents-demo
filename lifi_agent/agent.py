@@ -863,7 +863,7 @@ class LifAgent:
             })
             if not output_ok:
                 policy_passed = False
-                policy_reason = f"Output {output_amount} is below minimum {policy.min_output_amount}."
+                policy_reason = f"Output {output_float:.4f} is below minimum {policy.min_output_amount}."
         
         # Check avoid chains
         if policy.avoid_chains:
@@ -1195,7 +1195,7 @@ class LifAgent:
             ))
             if not output_ok:
                 policy_passed = False
-                policy_reason = f"Output {output_amount} is below minimum {policy.min_output_amount}."
+                policy_reason = f"Output {output_float:.4f} is below minimum {policy.min_output_amount}."
         
         # Check avoid chains
         if policy.avoid_chains:
