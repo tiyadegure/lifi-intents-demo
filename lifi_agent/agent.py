@@ -13,6 +13,51 @@ import time
 from pathlib import Path
 from .mcp_client import MCPClient
 
+# ── Rich TUI ──────────────────────────────────────────────────────
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.syntax import Syntax
+from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.text import Text
+from rich import box
+
+console = Console()
+
+# Chain color map for Rich styling
+CHAIN_COLORS = {
+    "ethereum": "cyan",
+    "base": "blue",
+    "arbitrum": "red",
+    "optimism": "bold red",
+    "polygon": "magenta",
+    "bsc": "yellow",
+    "avalanche": "bold red",
+    "zksync": "white",
+    "linea": "bold blue",
+    "scroll": "dim white",
+    "blast": "bold yellow",
+    "mantle": "white",
+    "sonic": "bold cyan",
+}
+
+def styled_chain(name: str) -> str:
+    """Return a Rich-formatted chain name."""
+    color = CHAIN_COLORS.get(name, "white")
+    return f"[{color}]{name.title()}[/{color}]"
+
+def status_ok(msg: str):
+    console.print(f"  [green]✓[/green] {msg}")
+
+def status_err(msg: str):
+    console.print(f"  [red]✗[/red] {msg}")
+
+def status_cached(msg: str):
+    console.print(f"  [yellow]⚡[/yellow] {msg}")
+
+def status_loading(msg: str):
+    console.print(f"  [blue]⏳[/blue] {msg}")
+
 # ── Preferences storage ────────────────────────────────────────────
 PREFS_FILE = Path.home() / ".lifi_agent_prefs.json"
 
@@ -368,43 +413,96 @@ class LifAgent:
 
 # ── Interactive CLI ─────────────────────────────────────────────────
 def interactive():
-    """Run interactive CLI mode with multi-turn conversation."""
-    import readline  # noqa: F401 — enables arrow key history
+    """Run interactive CLI mode with Rich TUI and auto-completion."""
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.completion import WordCompleter
+    from prompt_toolkit.styles import Style as PTStyle
 
     agent = LifAgent()
 
-    print("\n" + "=" * 60)
-    print("  LI.FI Intents × AI Agent")
-    print("  Cross-chain operations via natural language")
-    print("=" * 60)
-    print()
+    # ── Welcome banner ────────────────────────────────────────────
+    welcome_text = Text()
+    welcome_text.append("LI.FI Intents", style="bold cyan")
+    welcome_text.append(" × ", style="dim")
+    welcome_text.append("AI Agent", style="bold green")
+    welcome_text.append("\n\n")
+    welcome_text.append("Cross-chain operations via natural language", style="italic")
+    console.print()
+    console.print(Panel(welcome_text, border_style="cyan", box=box.ROUNDED, padding=(1, 2)))
+    console.print()
 
+    # ── Connect ───────────────────────────────────────────────────
     try:
         info = agent.connect()
-        print(f"✓ {info}")
+        status_ok(info)
     except Exception as e:
-        print(f"✗ Connection failed: {e}")
-        print("  Running in offline mode (cached data only)")
-    print()
+        status_err(f"Connection failed: {e}")
+        console.print("  [dim]Running in offline mode (cached data only)[/dim]")
+    console.print()
 
-    print("Commands:")
-    print("  send 10 USDC from Base to Arbitrum  — Execute a transfer")
-    print("  compare 10 USDC from Ethereum       — Compare quotes across chains")
-    print("  routes                               — Show supported routes")
-    print("  orders                               — Show recent orders")
-    print("  favorites                            — Show saved routes")
-    print("  yes / confirm                        — Confirm pending order")
-    print("  history                              — Show recent quotes")
-    print("  quit                                 — Exit")
-    print()
+    # ── Commands help ─────────────────────────────────────────────
+    help_table = Table(show_header=False, box=None, padding=(0, 2))
+    help_table.add_column("Command", style="bold")
+    help_table.add_column("Description")
+    help_table.add_row("[cyan]send[/cyan] 10 USDC from Base to Arbitrum", "Execute a transfer")
+    help_table.add_row("[cyan]compare[/cyan] 10 USDC from Ethereum", "Compare quotes across chains")
+    help_table.add_row("[cyan]routes[/cyan]", "Show supported routes")
+    help_table.add_row("[cyan]orders[/cyan]", "Show recent orders")
+    help_table.add_row("[cyan]favorites[/cyan]", "Show saved routes")
+    help_table.add_row("[cyan]wallet[/cyan]", "Show demo wallet info")
+    help_table.add_row("[cyan]history[/cyan]", "Show recent quotes")
+    help_table.add_row("[cyan]yes[/cyan] / [cyan]confirm[/cyan]", "Confirm pending order")
+    help_table.add_row("[cyan]quit[/cyan]", "Exit")
+    console.print(Panel(help_table, title="[bold]Commands[/bold]", border_style="dim", box=box.ROUNDED))
+    console.print()
+
+    # ── Auto-completion setup ─────────────────────────────────────
+    chain_names = list(CHAINS.keys())
+    token_names = ["USDC", "USDT", "ETH"]
+    commands = ["send", "compare", "routes", "orders", "favorites", "wallet",
+                "history", "yes", "confirm", "quit", "exit"]
+    all_completions = commands + chain_names + token_names + [
+        "from", "to", "bridge", "transfer",
+    ]
+    completer = WordCompleter(all_completions, ignore_case=True, match_middle=True)
+
+    prompt_style = PTStyle.from_dict({
+        "prompt": "bold cyan",
+    })
+
+    session = PromptSession(style=prompt_style)
 
     pending_intent = None
     pending_quote = None
 
+    def do_prompt() -> str:
+        if pending_intent:
+            return session.prompt(
+                [("class:prompt", "Confirm > ")],
+                completer=completer,
+            )
+        return session.prompt(
+            [("class:prompt", "You > ")],
+            completer=completer,
+        )
+
+    # ── Fee color helper ──────────────────────────────────────────
+    def fee_style(pct_str: str) -> str:
+        try:
+            pct = float(pct_str)
+        except ValueError:
+            return f"[red]{pct_str}%[/red]"
+        if pct < 0.2:
+            return f"[green]{pct_str}%[/green]"
+        elif pct < 0.5:
+            return f"[yellow]{pct_str}%[/yellow]"
+        else:
+            return f"[red]{pct_str}%[/red]"
+
+    # ── Main loop ─────────────────────────────────────────────────
     while True:
         try:
-            prompt = "Confirm > " if pending_intent else "You > "
-            text = input(prompt).strip()
+            text = do_prompt().strip()
         except (EOFError, KeyboardInterrupt):
             break
 
@@ -418,30 +516,34 @@ def interactive():
             if pending_quote:
                 quote_id = pending_quote.get("quoteId", "")
                 if quote_id:
-                    print(f"\n  Preparing order...")
-                    result = agent.prepare_order(quote_id)
+                    with Progress(SpinnerColumn(), TextColumn("[bold blue]Preparing order...[/bold blue]"), transient=True) as progress:
+                        progress.add_task("prep", total=None)
+                        result = agent.prepare_order(quote_id)
                     if "error" in result:
-                        print(f"  ✗ {result['error']}")
+                        status_err(result["error"])
                     else:
                         order = result.get("data", {})
-                        print(f"  ✓ Order prepared!")
-                        print(f"    Order ID: {order.get('id', '?')}")
-                        print(f"    Status: {order.get('status', '?')}")
+                        status_ok("Order prepared!")
+                        t = Table(show_header=False, box=box.SIMPLE, padding=(0, 1))
+                        t.add_column("Key", style="dim")
+                        t.add_column("Value")
+                        t.add_row("Order ID", str(order.get("id", "?")))
+                        t.add_row("Status", str(order.get("status", "?")))
+                        console.print(t)
                         agent.pending_order = order
-                        # Remember this route
                         agent.remember_route(pending_intent.from_chain, pending_intent.to_chain, pending_intent.token)
-                        print(f"    Route saved to favorites!")
+                        status_ok("Route saved to favorites!")
                 else:
-                    print("  ✗ No quote ID available")
+                    status_err("No quote ID available")
             else:
-                print("  ✗ No pending quote")
+                status_err("No pending quote")
             pending_intent = None
             pending_quote = None
-            print()
+            console.print()
             continue
 
         if pending_intent and text in ("no", "n", "cancel"):
-            print("\n  Cancelled.\n")
+            console.print("\n  [dim]Cancelled.[/dim]\n")
             pending_intent = None
             pending_quote = None
             continue
@@ -451,64 +553,103 @@ def interactive():
             pending_intent = None
             pending_quote = None
 
+        # ── Wallet command ─────────────────────────────────────
+        if text == "wallet":
+            wallet_table = Table(title="Demo Wallet", box=box.ROUNDED, border_style="cyan")
+            wallet_table.add_column("Field", style="dim")
+            wallet_table.add_column("Value")
+            wallet_table.add_row("Address", f"[bold]{DEMO_ADDRESS}[/bold]")
+            wallet_table.add_row("Network", "Multi-chain (demo)")
+            wallet_table.add_row("Balance", "[yellow]Connect wallet to view[/yellow]")
+            console.print()
+            console.print(wallet_table)
+            console.print()
+            continue
+
         # ── Handle commands ────────────────────────────────────
         if text == "routes":
-            result = agent.get_routes()
+            with Progress(SpinnerColumn(), TextColumn("[bold blue]Fetching routes...[/bold blue]"), transient=True) as progress:
+                progress.add_task("routes", total=None)
+                result = agent.get_routes()
             count = result.get("data", {}).get("count", "?")
             routes_list = result.get("data", {}).get("routes", [])
             msg = result.get("message", "")
-            print(f"\n  ✓ {count} routes available")
+            status_ok(f"{count} routes available")
             if routes_list:
-                # Show unique chain pairs
                 pairs = set()
                 for r in routes_list:
                     f = r.get("fromChain", "?")
                     t = r.get("toChain", "?")
                     pairs.add((f, t))
-                for f, t in sorted(pairs)[:15]:
-                    print(f"    {f} → {t}")
+                table = Table(box=box.SIMPLE_HEAVY, border_style="dim")
+                table.add_column("#", style="dim", width=4)
+                table.add_column("From", style="bold")
+                table.add_column("", justify="center")
+                table.add_column("To", style="bold")
+                for i, (f, t) in enumerate(sorted(pairs)[:15], 1):
+                    table.add_row(str(i), styled_chain(f.lower()), "→", styled_chain(t.lower()))
+                console.print(table)
                 if len(pairs) > 15:
-                    print(f"    ... and {len(pairs)-15} more")
+                    console.print(f"  [dim]... and {len(pairs)-15} more[/dim]")
             if msg:
-                print(f"  {msg}")
-            print()
+                console.print(f"  {msg}")
+            console.print()
             continue
 
         if text == "orders":
-            result = agent.list_orders()
+            with Progress(SpinnerColumn(), TextColumn("[bold blue]Fetching orders...[/bold blue]"), transient=True) as progress:
+                progress.add_task("orders", total=None)
+                result = agent.list_orders()
             orders = result.get("data", {}).get("orders", [])
             if not orders:
-                print("\n  No orders found.\n")
+                console.print("\n  [dim]No orders found.[/dim]\n")
             else:
+                table = Table(box=box.ROUNDED, border_style="dim")
+                table.add_column("Order ID", style="bold")
+                table.add_column("Status")
                 for o in orders:
-                    print(f"  {o.get('id', '?')} — {o.get('status', '?')}")
-            print()
+                    table.add_row(str(o.get("id", "?")), str(o.get("status", "?")))
+                console.print(table)
+            console.print()
             continue
 
         if text == "favorites":
             favs = agent.get_favorite_routes()
             if favs:
-                print(f"\n  Saved routes:")
+                table = Table(title="Saved Routes", box=box.ROUNDED, border_style="cyan")
+                table.add_column("#", style="dim", width=4)
+                table.add_column("From")
+                table.add_column("")
+                table.add_column("To")
+                table.add_column("Token")
                 for i, r in enumerate(favs, 1):
                     parts = r.split(":")
-                    print(f"    {i}. {parts[0].title()} → {parts[1].title()} ({parts[2].upper()})")
+                    table.add_row(str(i), styled_chain(parts[0]), "→", styled_chain(parts[1]), parts[2].upper())
+                console.print()
+                console.print(table)
             else:
-                print("\n  No saved routes yet. Execute a transfer to save it.")
-            print()
+                console.print("\n  [dim]No saved routes yet. Execute a transfer to save it.[/dim]")
+            console.print()
             continue
 
         if text == "history":
             recent = agent.quote_history[-5:]
             if recent:
-                print(f"\n  Recent quotes (last {len(recent)}):")
+                table = Table(title="Recent Quotes", box=box.ROUNDED, border_style="dim")
+                table.add_column("#", style="dim", width=4)
+                table.add_column("Time", style="dim")
+                table.add_column("Route")
+                table.add_column("Output")
                 for i, entry in enumerate(recent, 1):
                     ts = time.strftime("%H:%M:%S", time.localtime(entry["timestamp"]))
                     quotes = entry["result"].get("data", {}).get("quotes", [])
                     output = quotes[0].get("outputAmount", "?") if quotes else "?"
-                    print(f"    {i}. [{ts}] {entry['intent']} → {output}")
+                    table.add_row(str(i), ts, entry["intent"], output)
+                console.print()
+                console.print(table)
             else:
-                print("\n  No quote history yet.")
-            print()
+                console.print("\n  [dim]No quote history yet.[/dim]")
+            console.print()
             continue
 
         # ── Compare mode ───────────────────────────────────────
@@ -517,63 +658,96 @@ def interactive():
             try:
                 intent = parse_intent(text)
             except ValueError as e:
-                print(f"\n  ✗ {e}\n")
+                status_err(str(e))
+                console.print()
                 continue
 
-            print(f"\n  Comparing quotes for {intent.amount} {intent.token.upper()} from {intent.from_chain.title()}...")
-            results = agent.compare_quotes(intent)
+            console.print(f"\n  Comparing quotes for {intent.amount} {intent.token.upper()} from {styled_chain(intent.from_chain)}...")
+            with Progress(SpinnerColumn(), TextColumn("[bold blue]Fetching quotes...[/bold blue]"), transient=True) as progress:
+                progress.add_task("compare", total=None)
+                results = agent.compare_quotes(intent)
             if results:
-                print(f"\n  ✓ Best routes (sorted by fee):\n")
+                table = Table(title="Best Routes (sorted by output)", box=box.ROUNDED, border_style="green")
+                table.add_column("#", style="dim", width=4)
+                table.add_column("Route")
+                table.add_column("Output", justify="right")
+                table.add_column("Fee", justify="right")
                 for i, r in enumerate(results, 1):
-                    marker = " ← best" if i == 1 else ""
-                    print(f"    {i}. {intent.from_chain.title()} → {r['chain'].title()}")
-                    print(f"       Output: {r['output']} | Fee: ~{r['fee_pct']}%{marker}")
-                print()
+                    marker = " [bold green]← best[/bold green]" if i == 1 else ""
+                    fee_str = fee_style(r["fee_pct"])
+                    route = f"{styled_chain(intent.from_chain)} → {styled_chain(r['chain'])}"
+                    table.add_row(str(i), route, r["output"], fee_str)
+                console.print()
+                console.print(table)
             else:
-                print("  ✗ No quotes available for comparison\n")
+                status_err("No quotes available for comparison")
+            console.print()
             continue
 
         # ── Parse intent ───────────────────────────────────────
         try:
             intent = parse_intent(text)
         except ValueError as e:
-            print(f"\n  ✗ {e}\n")
+            status_err(str(e))
+            console.print()
             continue
 
-        print(f"\n  Intent: {intent}")
-        print(f"  Fetching quote...")
+        # Show intent and fetch with spinner
+        console.print(f"\n  Intent: {intent}")
+        with Progress(SpinnerColumn(), TextColumn("[bold blue]Fetching quote...[/bold blue]"), transient=True) as progress:
+            progress.add_task("quote", total=None)
+            result = agent.get_quote(intent)
 
-        result = agent.get_quote(intent)
-
-        # Handle errors with suggestions
+        # Handle errors
         if "error" in result:
-            print(f"  ✗ {result['error']}")
+            status_err(result["error"])
             if "suggestion" in result:
-                print(f"  💡 {result['suggestion']}")
-            print()
+                console.print(f"  [yellow]💡 {result['suggestion']}[/yellow]")
+            console.print()
             continue
 
         quotes = result.get("data", {}).get("quotes", [])
         if quotes:
             q = quotes[0]
-            print(f"\n  ✓ Quote from solver:")
-            print(f"    Input:    {q.get('inputAmount', '?')}")
-            print(f"    Output:   {q.get('outputAmount', '?')}")
-            print(f"    Quote ID: {q.get('quoteId', '?')}")
+            # Build a styled quote panel
+            fee_pct = agent._calc_fee(intent.amount, q.get("outputAmount", "0"))
+            quote_text = Text()
+            quote_text.append("Input:     ", style="dim")
+            quote_text.append(f"{q.get('inputAmount', '?')}\n")
+            quote_text.append("Output:    ", style="dim")
+            quote_text.append(f"{q.get('outputAmount', '?')}\n")
+            quote_text.append("Fee:       ", style="dim")
+            quote_text.append_text(Text.from_markup(fee_style(fee_pct)))
+            quote_text.append("\n")
+            quote_text.append("Quote ID:  ", style="dim")
+            quote_text.append(f"{q.get('quoteId', '?')}")
+            quote_text.append("\n\n")
+            quote_text.append("Route:     ", style="dim")
+            quote_text.append_text(Text.from_markup(
+                f"{styled_chain(intent.from_chain)}  →  {styled_chain(intent.to_chain)}"
+            ))
 
-            # Store for confirmation
+            console.print()
+            status_ok("Quote from solver:")
+            console.print(Panel(
+                quote_text,
+                border_style="green",
+                box=box.ROUNDED,
+                padding=(0, 2),
+            ))
+
             pending_intent = intent
             pending_quote = q
-            print(f"\n  Type 'yes' to prepare order, 'no' to cancel")
+            console.print("  Type [bold]'yes'[/bold] to prepare order, [dim]'no'[/dim] to cancel")
         else:
             msg = result.get("message", "No quotes available")
-            print(f"  ✗ {msg}")
+            status_err(msg)
             if "suggestion" in result:
-                print(f"  💡 {result['suggestion']}")
-        print()
+                console.print(f"  [yellow]💡 {result['suggestion']}[/yellow]")
+        console.print()
 
     agent.close()
-    print("Bye!")
+    console.print("[dim]Bye![/dim]")
 
 
 if __name__ == "__main__":
@@ -585,9 +759,10 @@ if __name__ == "__main__":
         try:
             intent = parse_intent(text)
             result = agent.get_quote(intent)
-            print(json.dumps(result, indent=2))
+            json_str = json.dumps(result, indent=2)
+            console.print(Syntax(json_str, "json", theme="monokai"))
         except ValueError as e:
-            print(f"Error: {e}")
+            status_err(str(e))
         finally:
             agent.close()
     else:
