@@ -1,28 +1,61 @@
 # LI.FI Intents × AI Agent - 提交材料
 
 ## 项目名称
-LI.FI Intents × AI Agent: 自然语言跨链交互
+LI.FI Intents × AI Agent: Safe Verdict — 策略驱动的跨链安全裁决
 
 ## 一句话描述
-用自然语言就能跨链转账的 AI Agent，基于 LI.FI Intents MCP 协议
+用自然语言定义跨链策略，AI Agent 自动检查路由、费用、健康状态，给出 EXECUTABLE 或 REFUSED 裁决
 
 ## 项目亮点
-1. **AI 意图解析** - 自然语言 → 跨链操作
-2. **MCP 协议集成** - 直接调用 LI.FI Intents
-3. **完整工具链** - Web UI + CLI + SDK
-4. **Solver 生态** - Route Health、Quote Inventory、Become a Solver
+1. **Safe Verdict 引擎** - 策略驱动的安全裁决，不是简单报价
+2. **AI 意图解析** - 自然语言 → 跨链操作 + 策略约束
+3. **MCP 协议集成** - 直接调用 LI.FI Intents
+4. **完整工具链** - Web UI + CLI + SDK
+5. **Solver 生态** - Route Health、Quote Inventory、Become a Solver
+
+## 核心功能：Safe Verdict
+```
+用户输入: "send 10 USDC from Base to Arbitrum only if fee < 0.5%"
+
+解析结果:
+  - Intent: 10 USDC base → arbitrum
+  - Policy: fee < 0.5%
+
+Safe Verdict Pipeline:
+  ✓ Route Supported: base → arbitrum (USDC)
+  ✓ Route Health: Skipped (not required by policy)
+  ✓ Quote Received: Output: 9.98 USDC
+  ✓ Fee Calculated: 0.18%
+  ✓ Fee Policy: Fee 0.18% ≤ limit 0.5%
+
+Verdict: EXECUTABLE
+
+Reason:
+  This intent satisfies the user policy. Fee 0.18% is within acceptable limits.
+```
 
 ## 技术架构
 ```
-User (自然语言)
+User Input (自然语言 + 策略)
      ↓
-AI Agent (意图解析 + LLM)
+Parse Intent + Policy
      ↓
-MCP Client (协议封装)
-     ↓
-LI.FI Intents MCP Server
-     ↓
-Solver Network (跨链执行)
+┌─────────────────────────────────────┐
+│  Safe Verdict Pipeline              │
+│  ┌─────────────────────────────────┐│
+│  │ 1. Check Supported Route        ││
+│  │ 2. Check Route Health (if req)  ││
+│  │ 3. Request Quote                ││
+│  │ 4. Calculate Fee                ││
+│  │ 5. Check Policy Constraints     ││
+│  └─────────────────────────────────┘│
+│                                     │
+│  Decision Engine                    │
+│  ┌─────────────────────────────────┐│
+│  │ EXECUTABLE or REFUSED           ││
+│  │ + Detailed Reasoning            ││
+│  └─────────────────────────────────┘│
+└─────────────────────────────────────┘
 ```
 
 ## 功能列表

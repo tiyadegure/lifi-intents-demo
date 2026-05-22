@@ -1,6 +1,6 @@
 """LI.FI Intents Agent — Cross-chain operations via natural language."""
 
-from .agent import LifAgent, Intent, parse_intent
+from .agent import LifAgent, Intent, Policy, Verdict, parse_intent, parse_policy, parse_intent_with_policy
 from .mcp_client import MCPClient
 
-__all__ = ["LifAgent", "Intent", "parse_intent", "MCPClient"]
+__all__ = ["LifAgent", "Intent", "Policy", "Verdict", "parse_intent", "parse_policy", "parse_intent_with_policy", "MCPClient"]

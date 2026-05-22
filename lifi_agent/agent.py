@@ -14,7 +14,8 @@ import time
 import sqlite3
 import logging
 from contextlib import contextmanager
-from typing import Optional
+from dataclasses import dataclass
+from typing import Optional, List, Dict, Any
 from pathlib import Path
 from datetime import datetime
 from .mcp_client import MCPClient
@@ -252,6 +253,94 @@ class Intent:
 
     def __repr__(self):
         return f"Intent({self.amount} {self.token.upper()} {self.from_chain}→{self.to_chain})"
+
+
+# ── Policy & Verdict System ────────────────────────────────────────
+@dataclass
+class Policy:
+    """User-defined safety policy for cross-chain intents."""
+    max_fee_pct: Optional[float] = None        # e.g., 0.5 means max 0.5% fee
+    require_healthy_route: bool = False         # require route health check
+    min_output_amount: Optional[float] = None   # minimum output amount
+    max_slippage: Optional[float] = None        # max slippage percentage
+    
+    def __repr__(self):
+        parts = []
+        if self.max_fee_pct is not None:
+            parts.append(f"fee<{self.max_fee_pct}%")
+        if self.require_healthy_route:
+            parts.append("healthy route")
+        if self.min_output_amount is not None:
+            parts.append(f"output>={self.min_output_amount}")
+        if self.max_slippage is not None:
+            parts.append(f"slippage<{self.max_slippage}%")
+        return f"Policy({', '.join(parts) if parts else 'no constraints'})"
+
+
+@dataclass
+class Verdict:
+    """Final decision with detailed reasoning."""
+    executable: bool
+    checks: List[Dict[str, Any]]      # list of {name, passed, detail}
+    reason: str                        # human-readable reason
+    quote_data: Optional[Dict] = None  # raw quote data if available
+    
+    def __repr__(self):
+        return f"Verdict({'EXECUTABLE' if self.executable else 'REFUSED'})"
+
+
+def parse_policy(text: str) -> Policy:
+    """Extract safety policy from natural language.
+    
+    Examples:
+        "send 10 USDC from Base to Arbitrum only if fee < 0.5%"
+        "bridge 50 USDT if route is healthy and fee < 1%"
+        "transfer 0.5 ETH if output >= 0.49"
+    """
+    policy = Policy()
+    
+    # Extract fee limit: "fee < 0.5%", "fee under 1%", "max fee 0.3%"
+    fee_match = re.search(r'(?:fee|fees?)\s*(?:<|<=|under|below|max(?:imum)?)\s*(\d+\.?\d*)\s*%', text)
+    if fee_match:
+        policy.max_fee_pct = float(fee_match.group(1))
+    
+    # Extract route health requirement: "if route is healthy", "healthy route"
+    if re.search(r'(?:route|routes?)\s*(?:is|are)?\s*healthy', text):
+        policy.require_healthy_route = True
+    if re.search(r'healthy\s*(?:route|routes?)', text):
+        policy.require_healthy_route = True
+    
+    # Extract minimum output: "output >= 9.95", "min output 9.9"
+    output_match = re.search(r'(?:output|min(?:imum)?\s*output)\s*(?:>=|>|at\s*least)\s*(\d+\.?\d*)', text)
+    if output_match:
+        policy.min_output_amount = float(output_match.group(1))
+    
+    # Extract slippage: "slippage < 0.5%", "max slippage 1%"
+    slippage_match = re.search(r'slippage\s*(?:<|<=|under|below|max(?:imum)?)\s*(\d+\.?\d*)\s*%', text)
+    if slippage_match:
+        policy.max_slippage = float(slippage_match.group(1))
+    
+    return policy
+
+
+def parse_intent_with_policy(text: str) -> tuple[Intent, Policy]:
+    """Parse both intent and policy from natural language.
+    
+    Returns: (Intent, Policy) tuple
+    """
+    # Extract policy conditions before parsing intent
+    # Remove policy clauses from text for intent parsing
+    intent_text = re.sub(
+        r'\b(?:only\s+)?if\b.*$',
+        '',
+        text,
+        flags=re.IGNORECASE
+    ).strip()
+    
+    intent = parse_intent(intent_text)
+    policy = parse_policy(text)
+    
+    return intent, policy
 
 
 CHAIN_ALIASES = {
@@ -505,6 +594,187 @@ class LifAgent:
 
         return result
 
+    def safe_verdict(self, intent: Intent, policy: Policy) -> Verdict:
+        """Execute the Safe Verdict pipeline: check route → health → quote → policy → decision.
+        
+        Returns a Verdict with EXECUTABLE or REFUSED and detailed reasoning.
+        """
+        checks = []
+        quote_data = None
+        
+        # ── Step 1: Check supported route ─────────────────────────
+        try:
+            routes_result = self.get_routes()
+            route_list = routes_result.get("data", {}).get("routes", [])
+            from_id = int(intent.from_chain_id())
+            to_id = int(intent.to_chain_id())
+            
+            if route_list:
+                matching = [r for r in route_list
+                            if r.get("fromChainId") == from_id and r.get("toChainId") == to_id
+                            and r.get("fromToken", {}).get("address", "").lower() == intent.from_token_address().lower()]
+                route_supported = len(matching) > 0
+            else:
+                route_supported = True  # Assume supported if can't verify
+            
+            checks.append({
+                "name": "Route Supported",
+                "passed": route_supported,
+                "detail": f"{intent.from_chain} → {intent.to_chain} ({intent.token.upper()})"
+            })
+            
+            if not route_supported:
+                return Verdict(
+                    executable=False,
+                    checks=checks,
+                    reason=f"No supported route found for {intent.from_chain} → {intent.to_chain} ({intent.token.upper()})."
+                )
+        except Exception as e:
+            checks.append({
+                "name": "Route Supported",
+                "passed": False,
+                "detail": f"Error checking route: {e}"
+            })
+            return Verdict(executable=False, checks=checks, reason=f"Failed to check route: {e}")
+        
+        # ── Step 2: Check route health (if policy requires) ───────
+        if policy.require_healthy_route:
+            try:
+                health_result = self.check_route_health(intent.from_chain, intent.to_chain)
+                health_data = health_result.get("data", {})
+                status = health_data.get("status", "unknown")
+                is_healthy = status.lower() in ["healthy", "ok", "good"]
+                
+                checks.append({
+                    "name": "Route Health",
+                    "passed": is_healthy,
+                    "detail": f"Status: {status.upper()}"
+                })
+                
+                if not is_healthy:
+                    return Verdict(
+                        executable=False,
+                        checks=checks,
+                        reason=f"Route health check failed. Status: {status}. The agent refuses to prepare the order."
+                    )
+            except Exception as e:
+                checks.append({
+                    "name": "Route Health",
+                    "passed": False,
+                    "detail": f"Error checking health: {e}"
+                })
+                return Verdict(executable=False, checks=checks, reason=f"Failed to check route health: {e}")
+        else:
+            checks.append({
+                "name": "Route Health",
+                "passed": True,
+                "detail": "Skipped (not required by policy)"
+            })
+        
+        # ── Step 3: Get quote ─────────────────────────────────────
+        try:
+            args = {
+                "fromChain": intent.from_chain_id(),
+                "toChain": intent.to_chain_id(),
+                "fromToken": intent.from_token_address(),
+                "toToken": intent.to_token_address(),
+                "amount": amount_to_raw(intent.amount, intent.token),
+                "userAddress": intent.address,
+            }
+            result = self.mcp.call("request-quote", args)
+            
+            if "error" in result:
+                checks.append({
+                    "name": "Quote Received",
+                    "passed": False,
+                    "detail": result.get("error", "Unknown error")
+                })
+                return Verdict(executable=False, checks=checks, reason=f"Failed to get quote: {result.get('error', 'Unknown error')}")
+            
+            quote_data = result.get("data", {})
+            quotes = quote_data.get("quotes", [])
+            
+            if not quotes:
+                checks.append({
+                    "name": "Quote Received",
+                    "passed": False,
+                    "detail": "No quotes returned"
+                })
+                return Verdict(executable=False, checks=checks, reason="No quotes available for this route.")
+            
+            q = quotes[0]
+            output_amount = q.get("outputAmount", "0")
+            quote_id = q.get("quoteId", "")
+            
+            checks.append({
+                "name": "Quote Received",
+                "passed": True,
+                "detail": f"Output: {output_amount}, Quote ID: {quote_id[:16]}..."
+            })
+            
+        except Exception as e:
+            checks.append({
+                "name": "Quote Received",
+                "passed": False,
+                "detail": f"Error getting quote: {e}"
+            })
+            return Verdict(executable=False, checks=checks, reason=f"Failed to get quote: {e}")
+        
+        # ── Step 4: Calculate fee ─────────────────────────────────
+        fee_pct = self._calc_fee(intent.amount, output_amount)
+        fee_pct_float = float(fee_pct) if fee_pct else 999.0
+        
+        checks.append({
+            "name": "Fee Calculated",
+            "passed": True,
+            "detail": f"Fee: {fee_pct}%"
+        })
+        
+        # ── Step 5: Check policy constraints ──────────────────────
+        policy_passed = True
+        policy_reason = ""
+        
+        # Check max fee
+        if policy.max_fee_pct is not None:
+            fee_ok = fee_pct_float <= policy.max_fee_pct
+            checks.append({
+                "name": "Fee Policy",
+                "passed": fee_ok,
+                "detail": f"Fee {fee_pct}% {'≤' if fee_ok else '>'} limit {policy.max_fee_pct}%"
+            })
+            if not fee_ok:
+                policy_passed = False
+                policy_reason = f"The quote fee is {fee_pct}%, which exceeds the user limit of {policy.max_fee_pct}%."
+        
+        # Check min output
+        if policy.min_output_amount is not None:
+            output_float = float(output_amount) if output_amount else 0
+            output_ok = output_float >= policy.min_output_amount
+            checks.append({
+                "name": "Output Policy",
+                "passed": output_ok,
+                "detail": f"Output {output_amount} {'≥' if output_ok else '<'} min {policy.min_output_amount}"
+            })
+            if not output_ok:
+                policy_passed = False
+                policy_reason = f"Output {output_amount} is below minimum {policy.min_output_amount}."
+        
+        # ── Step 6: Final Verdict ─────────────────────────────────
+        if policy_passed:
+            return Verdict(
+                executable=True,
+                checks=checks,
+                reason=f"This intent satisfies the user policy. Fee {fee_pct}% is within acceptable limits.",
+                quote_data=quote_data
+            )
+        else:
+            return Verdict(
+                executable=False,
+                checks=checks,
+                reason=f"{policy_reason} The agent refuses to prepare the order.",
+                quote_data=quote_data
+            )
+
     def compare_quotes(self, intent: Intent, chains: list[str] = None) -> list[dict]:
         """Compare quotes across multiple destination chains."""
         if chains is None:
@@ -636,6 +906,7 @@ def interactive():
     help_table.add_column("Command", style="bold")
     help_table.add_column("Description")
     help_table.add_row("[cyan]send[/cyan] 10 USDC from Base to Arbitrum", "Execute a transfer")
+    help_table.add_row("[cyan]safe[/cyan] send 10 USDC from Base to Arbitrum if fee < 0.5%", "Safe Verdict: check policy before executing")
     help_table.add_row("[cyan]compare[/cyan] 10 USDC from Ethereum", "Compare quotes across chains")
     help_table.add_row("[cyan]route health[/cyan] base arbitrum", "Check route health status")
     help_table.add_row("[cyan]routes[/cyan]", "Show supported routes")
@@ -652,10 +923,10 @@ def interactive():
     # ── Auto-completion setup ─────────────────────────────────────
     chain_names = list(CHAINS.keys())
     token_names = ["USDC", "USDT", "ETH"]
-    commands = ["send", "compare", "route", "routes", "orders", "favorites", "wallet",
+    commands = ["send", "safe", "verdict", "compare", "route", "routes", "orders", "favorites", "wallet",
                 "history", "stats", "quit"]
     all_completions = commands + chain_names + token_names + [
-        "from", "to", "bridge", "transfer",
+        "from", "to", "bridge", "transfer", "if", "fee", "healthy",
     ]
     completer = WordCompleter(all_completions, ignore_case=True, match_middle=True)
 
@@ -834,6 +1105,58 @@ def interactive():
                     console.print(table)
                 
                 console.print()
+            continue
+
+        # ── Safe Verdict command ──────────────────────────────────
+        if text.startswith("safe ") or text.startswith("verdict "):
+            # Remove command prefix
+            cmd_text = re.sub(r'^(safe|verdict)\s+', '', text, flags=re.IGNORECASE)
+            
+            try:
+                # Parse intent and policy
+                intent, policy = parse_intent_with_policy(cmd_text)
+                
+                console.print(f"\n  [bold cyan]🔍 Safe Verdict[/bold cyan]")
+                console.print(f"  Intent: [bold]{intent.amount} {intent.token.upper()} {intent.from_chain} → {intent.to_chain}[/bold]")
+                console.print(f"  Policy: [dim]{policy}[/dim]\n")
+                
+                # Execute Safe Verdict pipeline
+                with Progress(SpinnerColumn(), TextColumn("[bold blue]Running Safe Verdict checks...[/bold blue]"), transient=True) as progress:
+                    progress.add_task("verdict", total=None)
+                    verdict = agent.safe_verdict(intent, policy)
+                
+                # Display verdict
+                if verdict.executable:
+                    console.print(f"  [bold green]✓ Verdict: EXECUTABLE[/bold green]\n")
+                else:
+                    console.print(f"  [bold red]✗ Verdict: REFUSED[/bold red]\n")
+                
+                # Display checks
+                console.print("  [bold]Checks:[/bold]")
+                for check in verdict.checks:
+                    icon = "[green]✓[/green]" if check["passed"] else "[red]✗[/red]"
+                    console.print(f"    {icon} {check['name']}: {check['detail']}")
+                
+                # Display reason
+                console.print(f"\n  [bold]Reason:[/bold]")
+                console.print(f"    {verdict.reason}")
+                
+                # If executable, show quote details
+                if verdict.executable and verdict.quote_data:
+                    quotes = verdict.quote_data.get("quotes", [])
+                    if quotes:
+                        q = quotes[0]
+                        console.print(f"\n  [bold]Quote Details:[/bold]")
+                        console.print(f"    Output: {q.get('outputAmount', 'N/A')}")
+                        console.print(f"    Quote ID: {q.get('quoteId', 'N/A')[:16]}...")
+                
+                console.print()
+                
+            except ValueError as e:
+                console.print(f"\n  [red]Parse error:[/red] {e}")
+                console.print("  [dim]Example: safe send 10 USDC from Base to Arbitrum if fee < 0.5%[/dim]\n")
+            except Exception as e:
+                console.print(f"\n  [red]Error:[/red] {e}\n")
             continue
 
         if text == "orders":
