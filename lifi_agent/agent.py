@@ -222,7 +222,7 @@ class LifAgent:
     def compare_quotes(self, intent: Intent, chains: list[str] = None) -> list[dict]:
         """Compare quotes across multiple destination chains."""
         if chains is None:
-            chains = ["arbitrum", "optimism", "base", "polygon"]
+            chains = ["arbitrum", "optimism", "base", "polygon", "ethereum"]
 
         results = []
         for chain in chains:
@@ -234,25 +234,37 @@ class LifAgent:
                 quotes = quote.get("data", {}).get("quotes", [])
                 if quotes:
                     q = quotes[0]
+                    output = q.get("outputAmount", "0")
                     results.append({
                         "chain": chain,
-                        "output": q.get("outputAmount", "?"),
+                        "output": output,
                         "quote_id": q.get("quoteId", ""),
-                        "fee_pct": self._calc_fee(intent.amount, q.get("outputAmount", "0")),
+                        "fee_pct": self._calc_fee(intent.amount, output),
                     })
             except Exception:
                 continue
 
-        results.sort(key=lambda x: float(x.get("fee_pct", "999")))
+        # Sort by output amount (higher is better)
+        def parse_output(r):
+            try:
+                return float(''.join(c for c in r.get("output", "0") if c.isdigit() or c == '.'))
+            except ValueError:
+                return 0
+
+        results.sort(key=parse_output, reverse=True)
         return results
 
     def _calc_fee(self, input_amount: str, output_amount: str) -> str:
         """Calculate fee percentage."""
         try:
             inp = float(input_amount)
-            out = float(output_amount.replace(",", ""))
+            # Strip non-numeric chars (e.g. " USDC")
+            out_str = ''.join(c for c in output_amount if c.isdigit() or c == '.')
+            out = float(out_str)
+            if inp == 0:
+                return "999"
             fee = (inp - out) / inp * 100
-            return f"{fee:.3f}"
+            return f"{fee:.2f}"
         except (ValueError, ZeroDivisionError):
             return "999"
 
