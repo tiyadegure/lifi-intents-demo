@@ -50,6 +50,23 @@ The parser uses a **deterministic regex engine** by default, with optional LLM f
 
 The LI.FI Intents MCP server can run locally in stateless HTTP mode, which is more reliable than the hosted version (which has session management issues).
 
+### Two modes
+
+The CLI supports two modes and automatically selects the best one on startup:
+
+- **Primary: Local MCP Mode** — connects to the local MCP server at `localhost:3333/mcp` (configurable via `LIFI_MCP_URL`). Full solver quotes, real-time route health, and inventory checks.
+- **Fallback: Mock Mode** — if the local MCP server is not running, the CLI automatically falls back to mock data. Useful for testing the UI and Safe Verdict logic without an MCP server.
+
+To force mock mode regardless of server availability:
+
+```bash
+export LIFI_AGENT_DEMO_MODE=1
+```
+
+The CLI prints which mode is active on startup.
+
+### Setup
+
 ```bash
 # Clone and build the MCP server
 git clone https://github.com/lifinance/lifi-intents-mcp

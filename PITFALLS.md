@@ -235,20 +235,32 @@ Building on LI.FI Intents MCP requires careful handling of:
 
 These pitfalls are common but solvable. The key is to implement robust error handling and provide clear feedback to developers.
 
-## 11. Local vs Hosted MCP Server
+## 11. Local vs Hosted MCP Server (and Mock Mode)
 
 **Problem:** The hosted LI.FI Intents MCP server uses session management, which can cause "No valid session ID" errors and other session-related issues.
 
-**Solution:** Run the MCP server locally in stateless HTTP mode.
+**Solution:** Run the MCP server locally in stateless HTTP mode — or let the CLI fall back to mock data automatically.
 
-| | Local | Hosted |
-|---|---|---|
-| Mode | Stateless HTTP (no session ID) | Session-based |
-| API params | Friendly: `fromChain` (slug), `fromToken` (symbol), `amount` (human-readable) | Raw chain IDs, contract addresses, base units |
-| Reliability | High — no session expiry | Can return 403, session timeouts |
-| Setup | `PORT=3333 node dist/transport-http.js` | No setup needed |
+| | Local | Hosted | Mock |
+|---|---|---|---|
+| Mode | Stateless HTTP (no session ID) | Session-based | In-memory mock data |
+| API params | Friendly: `fromChain` (slug), `fromToken` (symbol), `amount` (human-readable) | Raw chain IDs, contract addresses, base units | N/A — no real server |
+| Reliability | High — no session expiry | Can return 403, session timeouts | Always available |
+| Setup | `PORT=3333 node dist/transport-http.js` | No setup needed | No setup needed |
+| Use case | Production / real quotes | Fallback only | UI testing, Safe Verdict demo |
 
-**Key differences:**
+### Auto-fallback behavior
+
+The CLI has two modes: **Local MCP** (primary) and **Mock** (fallback). On startup it attempts to connect to the local MCP server. If the server is unreachable, it automatically switches to mock mode so you can still test the UI and Safe Verdict logic. The CLI prints which mode is active.
+
+To force mock mode even when the MCP server is running:
+
+```bash
+export LIFI_AGENT_DEMO_MODE=1
+```
+
+### Key differences (Local vs Hosted)
+
 - Local runs in **stateless mode** — no session ID needed, the client handles this automatically
 - Local uses **friendly params**: chain slugs (`Base`), token symbols (`USDC`), human-readable amounts (`10`)
 - Hosted testnet may return **403 errors** without explanation
