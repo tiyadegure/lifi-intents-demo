@@ -15,7 +15,7 @@ from typing import Optional, Any
 
 logger = logging.getLogger(__name__)
 
-MCP_URL = "https://intents-mcp.li.fi/mcp"
+MCP_URL = os.environ.get("LIFI_MCP_URL", "http://localhost:3333/mcp")
 CACHE_TTL = 300  # 5 min cache
 MAX_CACHE_SIZE = 200  # Max cache entries
 MIN_CALL_INTERVAL = 1.0  # Rate limit: min 1s between calls
