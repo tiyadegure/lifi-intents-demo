@@ -4,6 +4,7 @@ LI.FI Intents Agent — Data models, constants, and chain registry.
 
 import os
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Optional, List, Dict, Any
 
 
@@ -86,10 +87,9 @@ def amount_to_raw(human_amount: str, token: str) -> str:
     """
     decimals = TOKEN_DECIMALS.get(token.lower(), 18)
     try:
-        amount_float = float(human_amount)
-        raw_amount = int(amount_float * (10 ** decimals))
+        raw_amount = int(Decimal(human_amount) * Decimal(10 ** decimals))
         return str(raw_amount)
-    except ValueError:
+    except (ValueError, ArithmeticError):
         return human_amount
 
 

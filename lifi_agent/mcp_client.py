@@ -33,8 +33,9 @@ class MCPClient:
         self._async_client: Optional[httpx.AsyncClient] = None
         self._cache: dict[str, tuple[float, Any]] = {}
         self._connected = False
-        # Rate limiting
-        self._last_call_time = 0.0
+        # Rate limiting — separate timestamps for sync/async to avoid cross-contamination
+        self._last_call_time_sync = 0.0
+        self._last_call_time_async = 0.0
         self._rate_lock = asyncio.Lock()
         self._rate_lock_sync = threading.Lock()
 
@@ -67,19 +68,19 @@ class MCPClient:
         """Enforce minimum interval between calls (sync)."""
         with self._rate_lock_sync:
             now = time.monotonic()
-            elapsed = now - self._last_call_time
+            elapsed = now - self._last_call_time_sync
             if elapsed < MIN_CALL_INTERVAL:
                 time.sleep(MIN_CALL_INTERVAL - elapsed)
-            self._last_call_time = time.monotonic()
+            self._last_call_time_sync = time.monotonic()
 
     async def _rate_limit_async(self):
         """Enforce minimum interval between calls (async)."""
         async with self._rate_lock:
             now = time.monotonic()
-            elapsed = now - self._last_call_time
+            elapsed = now - self._last_call_time_async
             if elapsed < MIN_CALL_INTERVAL:
                 await asyncio.sleep(MIN_CALL_INTERVAL - elapsed)
-            self._last_call_time = time.monotonic()
+            self._last_call_time_async = time.monotonic()
 
     def _headers(self, session_id: str = None) -> dict:
         h = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
@@ -90,19 +91,25 @@ class MCPClient:
 
     @staticmethod
     def _parse_sse(text: str) -> dict:
-        """Parse SSE response text and extract tool result."""
+        """Parse SSE response text and extract tool result from the last valid data line."""
+        last_result = None
         for line in text.split('\n'):
             s = line.strip()
             if s.startswith('data:'):
                 js = s[5:].strip()
                 if js:
-                    d = json.loads(js)
+                    try:
+                        d = json.loads(js)
+                    except json.JSONDecodeError:
+                        continue
                     for c in d.get("result", {}).get("content", []):
                         if c.get("type") == "text":
                             try:
-                                return json.loads(c["text"])
+                                last_result = json.loads(c["text"])
                             except json.JSONDecodeError:
-                                return {"raw": c["text"]}
+                                last_result = {"raw": c["text"]}
+        if last_result is not None:
+            return last_result
         return {"error": "No data in response"}
 
     @staticmethod
@@ -213,6 +220,7 @@ class MCPClient:
             ]
 
         if tool == "check-route-health":
+            # Always return healthy in demo mode (real API would require a solver API key)
             return {"data": {"healthy": True, "status": "healthy", "latencyMs": 120, "activeSolvers": 3}}
 
         if tool == "request-quote":
@@ -269,13 +277,15 @@ class MCPClient:
         for attempt in range(retries + 1):
             self._rate_limit_sync()
             try:
-                sid = self._init_session_sync()
+                # Only re-init session if we don't have one yet
+                if self.session_id is None:
+                    self._init_session_sync()
 
                 r = self.client.post(self.url,
                     json={"jsonrpc": "2.0", "id": 2,
                            "method": "tools/call",
                            "params": {"name": tool, "arguments": args or {}}},
-                    headers=self._headers(sid),
+                    headers=self._headers(),
                     timeout=self.timeout)
             except Exception as e:
                 last_error = {"error": str(e)}
@@ -290,6 +300,7 @@ class MCPClient:
                     err_msg = r.json().get("error", {}).get("message", "")
                     last_error = {"error": err_msg}
                     if "No valid session" in err_msg and attempt < retries:
+                        self.session_id = None  # Force re-init on next attempt
                         delay = 2 ** (attempt + 1)
                         logger.warning("Retry %d/%d for %s: session expired (waiting %ds)", attempt + 1, retries, tool, delay)
                         time.sleep(delay)
@@ -324,13 +335,15 @@ class MCPClient:
         for attempt in range(retries + 1):
             await self._rate_limit_async()
             try:
-                sid = await self._init_session_async()
+                # Only re-init session if we don't have one yet
+                if self.session_id is None:
+                    await self._init_session_async()
 
                 r = await ac.post(self.url,
                     json={"jsonrpc": "2.0", "id": 2,
                            "method": "tools/call",
                            "params": {"name": tool, "arguments": args or {}}},
-                    headers=self._headers(sid),
+                    headers=self._headers(),
                     timeout=self.timeout)
             except Exception as e:
                 last_error = {"error": str(e)}
@@ -345,6 +358,7 @@ class MCPClient:
                     err_msg = r.json().get("error", {}).get("message", "")
                     last_error = {"error": err_msg}
                     if "No valid session" in err_msg and attempt < retries:
+                        self.session_id = None  # Force re-init on next attempt
                         delay = 2 ** (attempt + 1)
                         logger.warning("Retry %d/%d for %s: session expired (waiting %ds)", attempt + 1, retries, tool, delay)
                         await asyncio.sleep(delay)

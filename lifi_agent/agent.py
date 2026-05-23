@@ -19,7 +19,7 @@ from datetime import datetime
 from .mcp_client import MCPClient
 from .models import (
     CHAINS, CHAIN_ALIASES, TOKENS, TOKEN_DECIMALS, DEMO_ADDRESS,
-    amount_to_raw, raw_to_amount, normalize_output_amount,
+    raw_to_amount, normalize_output_amount,
     Intent, Policy, Verdict, DecisionStep, DecisionResult,
 )
 from .parser import parse_policy, parse_intent, parse_intent_with_policy, parse_intent_llm
@@ -134,14 +134,19 @@ class LifAgent:
         return result
 
     def get_quote(self, intent: Intent) -> dict:
-        """Get a cross-chain quote with route validation."""
+        """Get a cross-chain quote with route validation.
+
+        Note: get_routes() is called first for validation, but the result is
+        already cached by MCPClient (CACHE_TTL=300s), so this is cheap on
+        repeated calls.
+        """
         routes_result = self.get_routes()
         route_list = routes_result.get("data", {}).get("routes", [])
 
         if route_list:
             matching = [r for r in route_list
-                        if str(r.get("fromChainId", r.get("fromChain", ""))) in (intent.from_chain_id(), intent.from_chain_name())
-                        and str(r.get("toChainId", r.get("toChain", ""))) in (intent.to_chain_id(), intent.to_chain_name())]
+                        if str(r.get("fromChainId", r.get("fromChain", ""))).lower() in (intent.from_chain_id(), intent.from_chain_name().lower())
+                        and str(r.get("toChainId", r.get("toChain", ""))).lower() in (intent.to_chain_id(), intent.to_chain_name().lower())]
             if not matching:
                 return {"error": f"No route found for {intent.from_chain} → {intent.to_chain} ({intent.token.upper()})"}
 
@@ -250,8 +255,8 @@ class LifAgent:
             
             if route_list:
                 matching = [r for r in route_list
-                            if str(r.get("fromChainId", r.get("fromChain", ""))) in (intent.from_chain_id(), intent.from_chain_name())
-                            and str(r.get("toChainId", r.get("toChain", ""))) in (intent.to_chain_id(), intent.to_chain_name())]
+                            if str(r.get("fromChainId", r.get("fromChain", ""))).lower() in (intent.from_chain_id(), intent.from_chain_name().lower())
+                            and str(r.get("toChainId", r.get("toChain", ""))).lower() in (intent.to_chain_id(), intent.to_chain_name().lower())]
                 route_supported = len(matching) > 0
             else:
                 route_supported = True
@@ -937,18 +942,24 @@ class LifAgent:
         
         # ── Check 2: MCP session initialized ──────────────────────
         try:
-            # Check if we have a session ID
-            if self.mcp.session_id:
+            session_id = self.mcp.session_id
+            if session_id is not None:
                 report["checks"].append({
                     "name": "MCP session initialized",
                     "passed": True,
-                    "detail": f"Session ID: {self.mcp.session_id[:8]}..."
+                    "detail": f"Session ID: {session_id[:8]}..."
+                })
+            elif self.mcp._connected:
+                report["checks"].append({
+                    "name": "MCP session initialized",
+                    "passed": True,
+                    "detail": "Stateless mode (no session ID)"
                 })
             else:
                 report["checks"].append({
                     "name": "MCP session initialized",
                     "passed": False,
-                    "detail": "No session ID"
+                    "detail": "Not connected and no session ID"
                 })
         except Exception as e:
             report["checks"].append({
@@ -960,7 +971,7 @@ class LifAgent:
         # ── Check 3: get-supported-routes works ───────────────────
         try:
             routes_result = self.get_routes()
-            route_count = routes_result.get("data", {}).get("count", 0)
+            route_count = len(routes_result.get("data", {}).get("routes", []))
             report["checks"].append({
                 "name": "get-supported-routes works",
                 "passed": True,

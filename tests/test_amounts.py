@@ -1,7 +1,7 @@
 """Tests for amount conversion functions."""
 
 import pytest
-from lifi_agent.agent import amount_to_raw, raw_to_amount, normalize_output_amount
+from lifi_agent.models import amount_to_raw, raw_to_amount, normalize_output_amount
 from lifi_agent.models import parse_amount_with_symbol
 
 

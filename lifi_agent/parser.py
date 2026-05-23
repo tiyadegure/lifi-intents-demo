@@ -7,6 +7,8 @@ import logging
 import os
 import re
 
+import httpx
+
 from .models import CHAINS, CHAIN_ALIASES, Intent, Policy
 
 
@@ -46,17 +48,19 @@ def parse_policy(text: str) -> Policy:
         policy.max_slippage = float(slippage_match.group(1))
 
     # Extract avoid chains: "avoid Ethereum", "avoid eth and polygon", "avoid Base min output 9.5"
-    avoid_match = re.search(r'avoid\s+((?:\w+(?:\s+(?:and|,)\s+)?)+)', text_lower)
+    # Use known chain names to avoid greedy capture issues
+    all_chain_names = sorted(set(list(CHAINS.keys()) + list(CHAIN_ALIASES.keys())), key=len, reverse=True)
+    chain_pattern = '|'.join(re.escape(c) for c in all_chain_names)
+    avoid_match = re.search(
+        rf'avoid\s+({chain_pattern})(?:\s*(?:and|,)\s*({chain_pattern}))?',
+        text_lower
+    )
     if avoid_match:
-        chains_str = avoid_match.group(1).strip()
-        # Split by "and" or comma
-        chains = re.split(r'\s+and\s+|\s*,\s*', chains_str)
-        for chain in chains:
-            chain = chain.strip()
-            if chain in CHAIN_ALIASES:
-                policy.avoid_chains.append(CHAIN_ALIASES[chain])
-            elif chain in CHAINS:
-                policy.avoid_chains.append(chain)
+        for g in avoid_match.groups():
+            if g:
+                chain = CHAIN_ALIASES.get(g, g)
+                if chain in CHAINS and chain not in policy.avoid_chains:
+                    policy.avoid_chains.append(chain)
 
     # Extract prefer cheapest: "prefer cheapest route", "cheapest route"
     if re.search(r'prefer\s+cheapest(?:\s+route)?', text_lower):
@@ -178,8 +182,6 @@ def parse_intent_llm(text: str, api_key: str = None, model: str = "gpt-4o-mini")
     Requires OPENAI_API_KEY env var or api_key parameter.
     Falls back to regex parser if LLM fails.
     """
-    import httpx
-
     api_key = api_key or os.environ.get("OPENAI_API_KEY")
     if not api_key:
         return parse_intent(text)  # Fallback to regex
