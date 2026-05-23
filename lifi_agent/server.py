@@ -300,9 +300,9 @@ PRESETS = {
     },
     "avoid-chain": {
         "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
-        "policy": {"avoid_chains": ["ethereum", "polygon"], "max_fee_pct": 1.0},
-        "description": "Avoids Ethereum and Polygon, allowing only direct L2-to-L2 routes.",
-        "category": "success",
+        "policy": {"avoid_chains": ["arbitrum"], "max_fee_pct": 1.0},
+        "description": "Sends to Arbitrum but policy avoids Arbitrum — should be REFUSED.",
+        "category": "failure",
     },
     "cheapest-route": {
         "intent": {"from_chain": "ethereum", "to_chain": "arbitrum", "token": "USDC", "amount": "50"},
@@ -322,10 +322,22 @@ PRESETS = {
         "description": "Fee limit set to 0.1% — likely to fail since solver fees are typically ~0.2%.",
         "category": "failure",
     },
+    "fee-too-high": {
+        "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
+        "policy": {"max_fee_pct": 0.01},
+        "description": "Fee limit set to 0.01% — demo fee is ~0.20%, so this is always REFUSED.",
+        "category": "failure",
+    },
+    "min-output": {
+        "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
+        "policy": {"min_output_amount": 9.99},
+        "description": "Requires minimum output of 9.99 USDC — demo returns ~9.98, edge-case REFUSED.",
+        "category": "edge-case",
+    },
     "multi-constraint": {
         "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
-        "policy": {"max_fee_pct": 0.5, "avoid_chains": ["ethereum", "polygon"], "min_output_amount": 9.5},
-        "description": "Combines fee cap, avoid chains, and minimum output — tests multiple policy checks at once.",
+        "policy": {"max_fee_pct": 0.5, "avoid_chains": ["ethereum", "polygon"], "min_output_amount": 9.99},
+        "description": "Combines fee cap, avoid chains, and minimum output 9.99 — tests multiple policy checks at once.",
         "category": "edge-case",
     },
 }
