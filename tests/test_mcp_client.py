@@ -71,7 +71,7 @@ class TestServerInfoParsing:
 # ── Mock mode ─────────────────────────────────────────────────────
 
 class TestMockMode:
-    def test_demo_mode_env_activates_mock(self, monkeypatch):
+    def test_mock_mode_env_activates_mock(self, monkeypatch):
         monkeypatch.setenv("LIFI_AGENT_MOCK_MODE", "1")
         client = MCPClient()
         assert client.is_mock_mode() is True

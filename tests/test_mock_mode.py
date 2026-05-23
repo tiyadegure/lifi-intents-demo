@@ -5,11 +5,11 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def enable_demo_mode(monkeypatch):
+def enable_mock_mode(monkeypatch):
     monkeypatch.setenv("LIFI_AGENT_MOCK_MODE", "1")
 
 
-class TestDemoModeVerdict:
+class TestMockModeVerdict:
     def test_executable(self):
         from lifi_agent.agent import LifAgent, Intent, Policy
         agent = LifAgent()
@@ -45,7 +45,7 @@ class TestDemoModeVerdict:
         assert len(result.steps) >= 5
 
 
-class TestDemoModeTools:
+class TestMockModeTools:
     def test_routes(self):
         from lifi_agent.agent import LifAgent
         agent = LifAgent()

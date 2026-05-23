@@ -16,6 +16,14 @@ from typing import Optional, Any
 logger = logging.getLogger(__name__)
 
 MCP_URL = os.environ.get("LIFI_MCP_URL", "http://localhost:3333/mcp")
+
+
+def _is_mock_forced() -> bool:
+    """Check if mock mode is forced via env var. Supports both LIFI_AGENT_MOCK_MODE and deprecated LIFI_AGENT_DEMO_MODE."""
+    if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1":
+        logger.warning("LIFI_AGENT_DEMO_MODE is deprecated, use LIFI_AGENT_MOCK_MODE instead")
+        return True
+    return os.environ.get("LIFI_AGENT_MOCK_MODE") == "1"
 CACHE_TTL = 300  # 5 min cache
 MAX_CACHE_SIZE = 200  # Max cache entries
 MIN_CALL_INTERVAL = 1.0  # Rate limit: min 1s between calls
@@ -126,7 +134,7 @@ class MCPClient:
 
     def _init_session_sync(self) -> str:
         """Initialize a new MCP session (sync). Returns session ID."""
-        if os.environ.get("LIFI_AGENT_MOCK_MODE") == "1" or self._mock_mode:
+        if _is_mock_forced() or self._mock_mode:
             self._connected = True
             return "demo-session"
         try:
@@ -156,7 +164,7 @@ class MCPClient:
 
     async def _init_session_async(self) -> str:
         """Initialize a new MCP session (async). Returns session ID."""
-        if os.environ.get("LIFI_AGENT_MOCK_MODE") == "1" or self._mock_mode:
+        if _is_mock_forced() or self._mock_mode:
             self._connected = True
             return "demo-session"
         try:
@@ -187,9 +195,9 @@ class MCPClient:
 
     def connect(self) -> dict:
         """Initialize MCP session (sync). Returns server info."""
-        if self.is_strict_mode() and os.environ.get("LIFI_AGENT_MOCK_MODE") == "1":
+        if self.is_strict_mode() and _is_mock_forced():
             raise RuntimeError("LIFI_AGENT_STRICT_MODE=1 conflicts with LIFI_AGENT_MOCK_MODE=1")
-        if os.environ.get("LIFI_AGENT_MOCK_MODE") == "1":
+        if _is_mock_forced():
             self._mock_mode = True
             self._connected = True
             return {'serverInfo': {'name': 'lifi-intents-demo', 'version': '1.0.0'}}
@@ -219,9 +227,9 @@ class MCPClient:
 
     async def connect_async(self) -> dict:
         """Initialize MCP session (async). Returns server info."""
-        if self.is_strict_mode() and os.environ.get("LIFI_AGENT_MOCK_MODE") == "1":
+        if self.is_strict_mode() and _is_mock_forced():
             raise RuntimeError("LIFI_AGENT_STRICT_MODE=1 conflicts with LIFI_AGENT_MOCK_MODE=1")
-        if os.environ.get("LIFI_AGENT_MOCK_MODE") == "1":
+        if _is_mock_forced():
             self._mock_mode = True
             self._connected = True
             return {'serverInfo': {'name': 'lifi-intents-demo', 'version': '1.0.0'}}
@@ -316,7 +324,7 @@ class MCPClient:
         if self.is_strict_mode() and self._mock_mode:
             raise RuntimeError("LIFI_AGENT_STRICT_MODE=1: refusing to use mock mode in call()")
         # Demo/mock mode: return mock data without hitting real MCP
-        if os.environ.get("LIFI_AGENT_MOCK_MODE") == "1" or self._mock_mode:
+        if _is_mock_forced() or self._mock_mode:
             return self._demo_call(tool, args)
 
         self._cleanup_cache()
@@ -380,7 +388,7 @@ class MCPClient:
         if self.is_strict_mode() and self._mock_mode:
             raise RuntimeError("LIFI_AGENT_STRICT_MODE=1: refusing to use mock mode in call_async()")
         # Demo/mock mode: return mock data without hitting real MCP
-        if os.environ.get("LIFI_AGENT_MOCK_MODE") == "1" or self._mock_mode:
+        if _is_mock_forced() or self._mock_mode:
             return self._demo_call(tool, args)
 
         self._cleanup_cache()
@@ -444,7 +452,7 @@ class MCPClient:
 
     def is_mock_mode(self) -> bool:
         """Check if client is running in mock/fallback mode."""
-        return self._mock_mode or os.environ.get("LIFI_AGENT_MOCK_MODE") == "1"
+        return self._mock_mode or _is_mock_forced()
 
     @staticmethod
     def is_strict_mode() -> bool:
@@ -455,6 +463,8 @@ class MCPClient:
         """Return why mock mode is active, or empty string if not in mock mode."""
         if not self.is_mock_mode():
             return ""
+        if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1":
+            return "LIFI_AGENT_DEMO_MODE=1 (deprecated)"
         if os.environ.get("LIFI_AGENT_MOCK_MODE") == "1":
             return "LIFI_AGENT_MOCK_MODE=1"
         if self.is_strict_mode():

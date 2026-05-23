@@ -16,7 +16,7 @@ from typing import Optional, List, Dict, Any
 from pathlib import Path
 from datetime import datetime
 
-from .mcp_client import MCPClient
+from .mcp_client import MCPClient, _is_mock_forced
 from .models import (
     CHAINS, CHAIN_ALIASES, TOKENS, TOKEN_DECIMALS, DEMO_ADDRESS,
     raw_to_amount, normalize_output_amount,
@@ -922,17 +922,19 @@ class LifAgent:
 
     def doctor(self) -> dict:
         """Run diagnostic checks on the MCP connection and configuration.
-        
-        Returns a diagnostic report with checks and warnings.
-        """
-        report = {
-            "checks": [],
-            "warnings": []
-        }
 
-        # ── Check 0: Operating Mode ─────────────────────────────
+        Returns a diagnostic report with grouped checks and warnings.
+        Format: {groups: [{name: str, checks: [...]}], warnings: [...]}
+        """
+        groups = []
+        warnings = []
         mock_mode = self.mcp.is_mock_mode()
         strict_mode = MCPClient.is_strict_mode()
+
+        # ── Group 1: Connection ───────────────────────────────────
+        conn_checks = []
+
+        # Operating Mode
         if mock_mode:
             source = self.mcp.mock_mode_source()
             detail = f"Mock mode active — source: {source}"
@@ -946,159 +948,82 @@ class LifAgent:
         else:
             status = "LOCAL"
             detail = "Connected to local MCP server"
-        report["checks"].append({
+        conn_checks.append({
             "name": "Operating Mode",
             "status": status,
             "passed": True,
             "detail": detail
         })
 
-        # ── Check 1: MCP endpoint reachable ───────────────────────
+        # MCP endpoint reachable
         try:
-            # Try to connect to MCP
             info = self.mcp.connect()
             if mock_mode:
-                forced = os.environ.get("LIFI_AGENT_MOCK_MODE") == "1"
+                forced = _is_mock_forced()
                 if forced:
                     detail = "Force mock mode (LIFI_AGENT_MOCK_MODE=1)"
                 else:
                     detail = "Local MCP unreachable, auto-fallback to mock mode"
             else:
                 detail = f"Connected to {info.get('serverInfo', {}).get('name', 'unknown')}"
-            report["checks"].append({
+            conn_checks.append({
                 "name": "MCP endpoint reachable",
                 "passed": True,
                 "detail": detail
             })
         except Exception as e:
-            report["checks"].append({
+            conn_checks.append({
                 "name": "MCP endpoint reachable",
                 "passed": False,
                 "detail": str(e)
             })
-        
-        # ── Check 2: MCP session initialized ──────────────────────
+
+        # MCP session initialized
         try:
             session_id = self.mcp.session_id
             if session_id is not None:
-                report["checks"].append({
+                conn_checks.append({
                     "name": "MCP session initialized",
                     "passed": True,
                     "detail": f"Session ID: {session_id[:8]}..."
                 })
             elif self.mcp._connected:
-                report["checks"].append({
+                conn_checks.append({
                     "name": "MCP session initialized",
                     "passed": True,
                     "detail": "Stateless mode (no session ID)"
                 })
             else:
-                report["checks"].append({
+                conn_checks.append({
                     "name": "MCP session initialized",
                     "passed": False,
                     "detail": "Not connected and no session ID"
                 })
         except Exception as e:
-            report["checks"].append({
+            conn_checks.append({
                 "name": "MCP session initialized",
                 "passed": False,
                 "detail": str(e)
             })
-        
-        # ── Check 3: get-supported-routes works ───────────────────
-        try:
-            routes_result = self.get_routes()
-            route_count = len(routes_result.get("data", {}).get("routes", []))
-            report["checks"].append({
-                "name": "get-supported-routes works",
+
+        # Mock Mode Source (only when mock mode is active)
+        if mock_mode:
+            source = self.mcp.mock_mode_source()
+            conn_checks.append({
+                "name": "Mock Mode Source",
                 "passed": True,
-                "detail": f"{route_count} routes available"
-            })
-        except Exception as e:
-            report["checks"].append({
-                "name": "get-supported-routes works",
-                "passed": False,
-                "detail": str(e)
-            })
-        
-        # ── Check 4: Base USDC address configured ─────────────────
-        base_usdc = TOKENS.get("usdc", {}).get("8453", "")
-        if base_usdc:
-            report["checks"].append({
-                "name": "Base USDC address configured",
-                "passed": True,
-                "detail": base_usdc[:10] + "..."
-            })
-        else:
-            report["checks"].append({
-                "name": "Base USDC address configured",
-                "passed": False,
-                "detail": "Not configured"
-            })
-        
-        # ── Check 5: Arbitrum USDC address configured ─────────────
-        arb_usdc = TOKENS.get("usdc", {}).get("42161", "")
-        if arb_usdc:
-            report["checks"].append({
-                "name": "Arbitrum USDC address configured",
-                "passed": True,
-                "detail": arb_usdc[:10] + "..."
-            })
-        else:
-            report["checks"].append({
-                "name": "Arbitrum USDC address configured",
-                "passed": False,
-                "detail": "Not configured"
-            })
-        
-        # ── Check 6: route health tool reachable ──────────────────
-        try:
-            health_result = self.check_route_health("base", "arbitrum")
-            report["checks"].append({
-                "name": "route health tool reachable",
-                "passed": True,
-                "detail": "Tool responded"
-            })
-        except Exception as e:
-            report["checks"].append({
-                "name": "route health tool reachable",
-                "passed": False,
-                "detail": str(e)
-            })
-        
-        # ── Check 7: request-quote works ──────────────────────────
-        try:
-            # Try to get a quote with a small amount
-            quote_result = self.get_quote(Intent("base", "arbitrum", "usdc", "1"))
-            if "error" not in quote_result:
-                quotes = quote_result.get("data", {}).get("quotes", [])
-                if quotes:
-                    q = quotes[0]
-                    detail = f"Quote received — input: {q.get('inputAmount', '?')}, output: {q.get('outputAmount', '?')}, id: {q.get('quoteId', '?')[:16]}..."
-                else:
-                    detail = "Quote received but no quotes in response"
-                report["checks"].append({
-                    "name": "request-quote works",
-                    "passed": True,
-                    "detail": detail
-                })
-            else:
-                report["checks"].append({
-                    "name": "request-quote works",
-                    "passed": False,
-                    "detail": quote_result.get("error", "Unknown error")
-                })
-        except Exception as e:
-            report["checks"].append({
-                "name": "request-quote works",
-                "passed": False,
-                "detail": str(e)
+                "detail": source
             })
 
-        # ── Check 8: MCP Protocol handshake ───────────────────────
+        groups.append({"name": "Connection", "checks": conn_checks})
+
+        # ── Group 2: Protocol ─────────────────────────────────────
+        proto_checks = []
+
+        # MCP Protocol version
         try:
             if mock_mode:
-                report["checks"].append({
+                proto_checks.append({
                     "name": "MCP Protocol",
                     "passed": True,
                     "detail": "Skipped (mock mode)"
@@ -1116,31 +1041,31 @@ class LifAgent:
                 if init_result.status_code == 200:
                     server_info = MCPClient._parse_server_info(init_result.text)
                     info = server_info.get("serverInfo", {})
-                    report["checks"].append({
+                    proto_checks.append({
                         "name": "MCP Protocol",
                         "passed": True,
                         "detail": f"Protocol {protocol_version}, server: {info.get('name', '?')} v{info.get('version', '?')}"
                     })
                 else:
-                    report["checks"].append({
+                    proto_checks.append({
                         "name": "MCP Protocol",
                         "passed": False,
                         "detail": f"HTTP {init_result.status_code}"
                     })
         except Exception as e:
-            report["checks"].append({
+            proto_checks.append({
                 "name": "MCP Protocol",
                 "passed": False,
                 "detail": str(e)
             })
 
-        # ── Check 9: Available Tools ──────────────────────────────
+        # Available Tools
         try:
             if mock_mode:
                 tools = ["get-supported-routes", "request-quote", "check-route-health",
                          "prepare-order", "track-order", "list-orders", "get-solver-identities",
                          "get-quote-inventory", "submit-standing-quotes"]
-                report["checks"].append({
+                proto_checks.append({
                     "name": "Available Tools",
                     "passed": True,
                     "detail": f"{len(tools)} tools (mock): {', '.join(tools[:5])}..."
@@ -1157,31 +1082,115 @@ class LifAgent:
                     if "error" not in parsed:
                         tool_list = parsed.get("tools", [])
                         tool_names = [t.get("name", "?") for t in tool_list]
-                        report["checks"].append({
+                        proto_checks.append({
                             "name": "Available Tools",
                             "passed": True,
                             "detail": f"{len(tool_names)} tools: {', '.join(tool_names[:5])}{'...' if len(tool_names) > 5 else ''}"
                         })
                     else:
-                        report["checks"].append({
+                        proto_checks.append({
                             "name": "Available Tools",
                             "passed": True,
                             "detail": "Tools list returned (parsed as non-standard format)"
                         })
                 else:
-                    report["checks"].append({
+                    proto_checks.append({
                         "name": "Available Tools",
                         "passed": False,
                         "detail": f"HTTP {tools_result.status_code}"
                     })
         except Exception as e:
-            report["checks"].append({
+            proto_checks.append({
                 "name": "Available Tools",
                 "passed": False,
                 "detail": str(e)
             })
 
-        # ── Check 10: Quote Test (small amount) ───────────────────
+        groups.append({"name": "Protocol", "checks": proto_checks})
+
+        # ── Group 3: Routes ───────────────────────────────────────
+        route_checks = []
+
+        # get-supported-routes works
+        try:
+            routes_result = self.get_routes()
+            route_count = len(routes_result.get("data", {}).get("routes", []))
+            route_checks.append({
+                "name": "get-supported-routes works",
+                "passed": True,
+                "detail": f"{route_count} routes available"
+            })
+        except Exception as e:
+            route_checks.append({
+                "name": "get-supported-routes works",
+                "passed": False,
+                "detail": str(e)
+            })
+
+        # Base USDC address configured
+        base_usdc = TOKENS.get("usdc", {}).get("8453", "")
+        if base_usdc:
+            route_checks.append({
+                "name": "Base USDC address configured",
+                "passed": True,
+                "detail": base_usdc[:10] + "..."
+            })
+        else:
+            route_checks.append({
+                "name": "Base USDC address configured",
+                "passed": False,
+                "detail": "Not configured"
+            })
+
+        # Arbitrum USDC address configured
+        arb_usdc = TOKENS.get("usdc", {}).get("42161", "")
+        if arb_usdc:
+            route_checks.append({
+                "name": "Arbitrum USDC address configured",
+                "passed": True,
+                "detail": arb_usdc[:10] + "..."
+            })
+        else:
+            route_checks.append({
+                "name": "Arbitrum USDC address configured",
+                "passed": False,
+                "detail": "Not configured"
+            })
+
+        groups.append({"name": "Routes", "checks": route_checks})
+
+        # ── Group 4: Quotes ───────────────────────────────────────
+        quote_checks = []
+
+        # request-quote works
+        try:
+            quote_result = self.get_quote(Intent("base", "arbitrum", "usdc", "1"))
+            if "error" not in quote_result:
+                quotes = quote_result.get("data", {}).get("quotes", [])
+                if quotes:
+                    q = quotes[0]
+                    detail = f"Quote received — input: {q.get('inputAmount', '?')}, output: {q.get('outputAmount', '?')}, id: {q.get('quoteId', '?')[:16]}..."
+                else:
+                    detail = "Quote received but no quotes in response"
+                quote_checks.append({
+                    "name": "request-quote works",
+                    "passed": True,
+                    "detail": detail
+                })
+            else:
+                quote_checks.append({
+                    "name": "request-quote works",
+                    "passed": False,
+                    "detail": quote_result.get("error", "Unknown error")
+                })
+        except Exception as e:
+            quote_checks.append({
+                "name": "request-quote works",
+                "passed": False,
+                "detail": str(e)
+            })
+
+        # Quote Test (actual solver response)
         try:
             quote_args = {
                 "fromChain": "base",
@@ -1196,54 +1205,45 @@ class LifAgent:
                 quotes = result.get("data", {}).get("quotes", [])
                 if quotes:
                     q = quotes[0]
-                    report["checks"].append({
+                    quote_checks.append({
                         "name": "Quote Test",
                         "passed": True,
                         "detail": f"1 USDC Base→Arbitrum: output {q.get('outputAmount', '?')}, solver responded"
                     })
                 else:
-                    report["checks"].append({
+                    quote_checks.append({
                         "name": "Quote Test",
                         "passed": False,
                         "detail": "No quotes returned for 1 USDC Base→Arbitrum"
                     })
             else:
-                report["checks"].append({
+                quote_checks.append({
                     "name": "Quote Test",
                     "passed": False,
                     "detail": result.get("error", "Unknown error")
                 })
         except Exception as e:
-            report["checks"].append({
+            quote_checks.append({
                 "name": "Quote Test",
                 "passed": False,
                 "detail": str(e)
             })
 
-        # ── Check 11: Mock Mode Source ────────────────────────────
-        if mock_mode:
-            source = self.mcp.mock_mode_source()
-            report["checks"].append({
-                "name": "Mock Mode Source",
-                "passed": True,
-                "detail": source
-            })
-        
+        groups.append({"name": "Quotes", "checks": quote_checks})
+
         # ── Warnings ──────────────────────────────────────────────
-        # Warning 1: OPENAI_API_KEY not set
         if not os.environ.get("OPENAI_API_KEY"):
-            report["warnings"].append({
+            warnings.append({
                 "name": "OPENAI_API_KEY not set",
                 "detail": "Using deterministic parser"
             })
-        
-        # Warning 2: Amount unit behavior
-        report["warnings"].append({
+
+        warnings.append({
             "name": "Amount unit behavior",
             "detail": "Should be verified before real execution"
         })
-        
-        return report
+
+        return {"groups": groups, "warnings": warnings}
 
     def close(self):
         self.mcp.close()
@@ -1455,17 +1455,20 @@ def interactive():
                 progress.add_task("doctor", total=None)
                 report = agent.doctor()
             
-            # Display checks
-            for check in report["checks"]:
-                icon = "[green]✓[/green]" if check["passed"] else "[red]✗[/red]"
-                console.print(f"  {icon} {check['name']}: {check['detail']}")
-            
+            # Display grouped checks
+            for group in report["groups"]:
+                console.print(f"  [bold]{group['name']}[/bold]")
+                for check in group["checks"]:
+                    icon = "[green]✓[/green]" if check["passed"] else "[red]✗[/red]"
+                    console.print(f"    {icon} {check['name']}: {check['detail']}")
+                console.print()
+
             # Display warnings
             if report["warnings"]:
-                console.print(f"\n  [bold yellow]Warnings:[/bold yellow]")
+                console.print(f"  [bold yellow]Warnings:[/bold yellow]")
                 for warning in report["warnings"]:
                     console.print(f"  [yellow]![/yellow] {warning['name']}: {warning['detail']}")
-            
+
             console.print()
             continue
 

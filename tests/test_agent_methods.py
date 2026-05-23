@@ -198,20 +198,21 @@ class TestExplain:
 # ── doctor ────────────────────────────────────────────────────────
 
 class TestDoctor:
-    def test_doctor_returns_checks(self, agent):
-        """doctor() returns a list of checks."""
+    def test_doctor_returns_groups(self, agent):
+        """doctor() returns a list of groups."""
         report = agent.doctor()
-        assert "checks" in report
-        assert isinstance(report["checks"], list)
-        assert len(report["checks"]) >= 5
+        assert "groups" in report
+        assert isinstance(report["groups"], list)
+        assert len(report["groups"]) >= 4
 
     def test_doctor_check_fields(self, agent):
         """Each check has name, passed, and detail."""
         report = agent.doctor()
-        for check in report["checks"]:
-            assert "name" in check
-            assert "passed" in check
-            assert "detail" in check
+        for group in report["groups"]:
+            for check in group["checks"]:
+                assert "name" in check
+                assert "passed" in check
+                assert "detail" in check
 
     def test_doctor_has_warnings(self, agent):
         """doctor() returns warnings list."""
@@ -219,10 +220,20 @@ class TestDoctor:
         assert "warnings" in report
         assert isinstance(report["warnings"], list)
 
-    def test_doctor_check_names(self, agent):
-        """doctor() includes expected check names."""
+    def test_doctor_group_names(self, agent):
+        """doctor() includes expected group names."""
         report = agent.doctor()
-        names = [c["name"] for c in report["checks"]]
+        names = [g["name"] for g in report["groups"]]
+        assert "Connection" in names
+        assert "Protocol" in names
+        assert "Routes" in names
+        assert "Quotes" in names
+
+    def test_doctor_check_names(self, agent):
+        """doctor() includes expected check names across groups."""
+        report = agent.doctor()
+        all_checks = [c for g in report["groups"] for c in g["checks"]]
+        names = [c["name"] for c in all_checks]
         assert "MCP endpoint reachable" in names
         assert "request-quote works" in names
         assert "Base USDC address configured" in names
@@ -230,8 +241,9 @@ class TestDoctor:
     def test_doctor_all_pass_in_demo(self, agent):
         """All checks pass in demo mode."""
         report = agent.doctor()
-        for check in report["checks"]:
-            assert check["passed"] is True, f"Check '{check['name']}' failed: {check['detail']}"
+        for group in report["groups"]:
+            for check in group["checks"]:
+                assert check["passed"] is True, f"Check '{check['name']}' failed: {check['detail']}"
 
     def test_doctor_warning_openai_key(self, agent):
         """OPENAI_API_KEY warning present when key not set."""
