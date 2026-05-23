@@ -64,14 +64,16 @@ async def startup():
 
 
 def ensure_connected():
-    """Lazy MCP connection (skip in demo mode)."""
-    if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1":
-        return
+    """Lazy MCP connection (auto-fallback to mock mode if local MCP unavailable)."""
     if not agent.mcp._connected:
         with _connect_lock:
             if not agent.mcp._connected:
                 try:
                     agent.connect()
+                    if agent.mcp.is_mock_mode():
+                        print("MCP: local server not available, using mock mode")
+                    else:
+                        print("MCP: connected to local server")
                 except Exception as e:
                     print(f"MCP connect failed: {e}")
 

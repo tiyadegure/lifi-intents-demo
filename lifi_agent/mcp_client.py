@@ -33,6 +33,7 @@ class MCPClient:
         self._async_client: Optional[httpx.AsyncClient] = None
         self._cache: dict[str, tuple[float, Any]] = {}
         self._connected = False
+        self._mock_mode = False
         # Rate limiting — separate timestamps for sync/async to avoid cross-contamination
         self._last_call_time_sync = 0.0
         self._last_call_time_async = 0.0
@@ -125,91 +126,117 @@ class MCPClient:
 
     def _init_session_sync(self) -> str:
         """Initialize a new MCP session (sync). Returns session ID."""
-        if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1":
+        if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1" or self._mock_mode:
             self._connected = True
             return "demo-session"
-        r = self.client.post(self.url,
-            json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
-                "protocolVersion": "2025-03-26", "capabilities": {},
-                "clientInfo": {"name": "lifi-agent", "version": "1.0"}}},
-            headers={"Content-Type": "application/json", "Accept": "application/json, text/event-stream"},
-            timeout=self.timeout)
-        sid = r.headers.get("mcp-session-id")
+        try:
+            r = self.client.post(self.url,
+                json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+                    "protocolVersion": "2025-03-26", "capabilities": {},
+                    "clientInfo": {"name": "lifi-agent", "version": "1.0"}}},
+                headers={"Content-Type": "application/json", "Accept": "application/json, text/event-stream"},
+                timeout=self.timeout)
+            sid = r.headers.get("mcp-session-id")
 
-        self.client.post(self.url,
-            json={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
-            headers=self._headers(sid),
-            timeout=self.timeout)
+            self.client.post(self.url,
+                json={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+                headers=self._headers(sid),
+                timeout=self.timeout)
 
-        self.session_id = sid
-        self._connected = True
-        return sid
+            self.session_id = sid
+            self._connected = True
+            return sid
+        except (httpx.ConnectError, httpx.TimeoutException) as e:
+            logger.warning("Local MCP not available at %s, falling back to mock mode", self.url)
+            self._mock_mode = True
+            self._connected = True
+            return "demo-session"
 
     async def _init_session_async(self) -> str:
         """Initialize a new MCP session (async). Returns session ID."""
-        if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1":
+        if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1" or self._mock_mode:
             self._connected = True
             return "demo-session"
-        ac = await self._get_async_client()
-        r = await ac.post(self.url,
-            json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
-                "protocolVersion": "2025-03-26", "capabilities": {},
-                "clientInfo": {"name": "lifi-agent", "version": "1.0"}}},
-            headers={"Content-Type": "application/json", "Accept": "application/json, text/event-stream"},
-            timeout=self.timeout)
-        sid = r.headers.get("mcp-session-id")
+        try:
+            ac = await self._get_async_client()
+            r = await ac.post(self.url,
+                json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+                    "protocolVersion": "2025-03-26", "capabilities": {},
+                    "clientInfo": {"name": "lifi-agent", "version": "1.0"}}},
+                headers={"Content-Type": "application/json", "Accept": "application/json, text/event-stream"},
+                timeout=self.timeout)
+            sid = r.headers.get("mcp-session-id")
 
-        await ac.post(self.url,
-            json={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
-            headers=self._headers(sid),
-            timeout=self.timeout)
+            await ac.post(self.url,
+                json={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+                headers=self._headers(sid),
+                timeout=self.timeout)
 
-        self.session_id = sid
-        self._connected = True
-        return sid
+            self.session_id = sid
+            self._connected = True
+            return sid
+        except (httpx.ConnectError, httpx.TimeoutException) as e:
+            logger.warning("Local MCP not available at %s, falling back to mock mode", self.url)
+            self._mock_mode = True
+            self._connected = True
+            return "demo-session"
 
     def connect(self) -> dict:
         """Initialize MCP session (sync). Returns server info."""
         if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1":
+            self._mock_mode = True
             self._connected = True
             return {'serverInfo': {'name': 'lifi-intents-demo', 'version': '1.0.0'}}
-        r = self.client.post(self.url,
-            json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
-                "protocolVersion": "2025-03-26", "capabilities": {},
-                "clientInfo": {"name": "lifi-agent", "version": "1.0"}}},
-            headers={"Content-Type": "application/json", "Accept": "application/json, text/event-stream"},
-            timeout=self.timeout)
-        self.session_id = r.headers.get("mcp-session-id")
-        self._connected = True
+        try:
+            r = self.client.post(self.url,
+                json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+                    "protocolVersion": "2025-03-26", "capabilities": {},
+                    "clientInfo": {"name": "lifi-agent", "version": "1.0"}}},
+                headers={"Content-Type": "application/json", "Accept": "application/json, text/event-stream"},
+                timeout=self.timeout)
+            self.session_id = r.headers.get("mcp-session-id")
+            self._connected = True
 
-        self.client.post(self.url,
-            json={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
-            headers=self._headers(),
-            timeout=self.timeout)
+            self.client.post(self.url,
+                json={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+                headers=self._headers(),
+                timeout=self.timeout)
 
-        return self._parse_server_info(r.text)
+            return self._parse_server_info(r.text)
+        except (httpx.ConnectError, httpx.TimeoutException) as e:
+            logger.warning("Local MCP not available at %s, falling back to mock mode", self.url)
+            self._mock_mode = True
+            self._connected = True
+            return {'serverInfo': {'name': 'lifi-intents-demo', 'version': '1.0.0'}}
 
     async def connect_async(self) -> dict:
         """Initialize MCP session (async). Returns server info."""
         if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1":
+            self._mock_mode = True
             self._connected = True
             return {'serverInfo': {'name': 'lifi-intents-demo', 'version': '1.0.0'}}
-        ac = await self._get_async_client()
-        r = await ac.post(self.url,
-            json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
-                "protocolVersion": "2025-03-26", "capabilities": {},
-                "clientInfo": {"name": "lifi-agent", "version": "1.0"}}},
-            headers={"Content-Type": "application/json", "Accept": "application/json, text/event-stream"},
-            timeout=self.timeout)
-        self.session_id = r.headers.get("mcp-session-id")
-        self._connected = True
+        try:
+            ac = await self._get_async_client()
+            r = await ac.post(self.url,
+                json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+                    "protocolVersion": "2025-03-26", "capabilities": {},
+                    "clientInfo": {"name": "lifi-agent", "version": "1.0"}}},
+                headers={"Content-Type": "application/json", "Accept": "application/json, text/event-stream"},
+                timeout=self.timeout)
+            self.session_id = r.headers.get("mcp-session-id")
+            self._connected = True
 
-        await ac.post(self.url,
-            json={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
-            headers=self._headers(),
-            timeout=self.timeout)
+            await ac.post(self.url,
+                json={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+                headers=self._headers(),
+                timeout=self.timeout)
 
-        return self._parse_server_info(r.text)
+            return self._parse_server_info(r.text)
+        except (httpx.ConnectError, httpx.TimeoutException) as e:
+            logger.warning("Local MCP not available at %s, falling back to mock mode", self.url)
+            self._mock_mode = True
+            self._connected = True
+            return {'serverInfo': {'name': 'lifi-intents-demo', 'version': '1.0.0'}}
 
     def _demo_call(self, tool: str, args: dict = None) -> dict:
         """Return mock data for demo mode. Set LIFI_AGENT_DEMO_MODE=1 to activate."""
@@ -273,8 +300,8 @@ class MCPClient:
 
     def call(self, tool: str, args: dict = None, use_cache: bool = True, retries: int = 2) -> dict:
         """Call an MCP tool (sync) with rate limiting, connection pooling, caching, and retry."""
-        # Demo mode: return mock data without hitting real MCP
-        if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1":
+        # Demo/mock mode: return mock data without hitting real MCP
+        if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1" or self._mock_mode:
             return self._demo_call(tool, args)
 
         self._cleanup_cache()
@@ -334,6 +361,10 @@ class MCPClient:
     async def call_async(self, tool: str, args: dict = None, use_cache: bool = True, retries: int = 2) -> dict:
         """Call an MCP tool (async) with rate limiting, connection pooling, caching, and retry.
         Supports parallel calls via asyncio.gather()."""
+        # Demo/mock mode: return mock data without hitting real MCP
+        if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1" or self._mock_mode:
+            return self._demo_call(tool, args)
+
         self._cleanup_cache()
         cache_key = f"{tool}:{json.dumps(args or {}, sort_keys=True)}"
 
@@ -392,6 +423,10 @@ class MCPClient:
     def warmup(self):
         """Prime the session cache by calling get-supported-routes once."""
         self.call("get-supported-routes", {})
+
+    def is_mock_mode(self) -> bool:
+        """Check if client is running in mock/fallback mode."""
+        return self._mock_mode or os.environ.get("LIFI_AGENT_DEMO_MODE") == "1"
 
     def close(self):
         """Close sync client."""
