@@ -660,26 +660,24 @@ class LifAgent:
     def solver_aware_checks(self, from_chain: str, to_chain: str,
                             from_asset: str = None, to_asset: str = None) -> dict:
         """Run all solver-aware checks for a route.
-        
-        Returns a comprehensive report with:
-        1. Route Health
-        2. Quote Availability
-        3. Solver Inventory
-        Each check includes: what happened, why it matters, what to do next.
+
+        Returns a comprehensive report with standardized check fields:
+        name, status, passed, details (dict), explanation, action, duration_ms.
         """
         report = {
             "route": f"{from_chain} → {to_chain}",
             "checks": [],
             "summary": {}
         }
-        
+
         # ── Check 1: Route Health ─────────────────────────────────
+        check_start = time.time()
         try:
             health_result = self.check_route_health(from_chain, to_chain, from_asset, to_asset)
             health_data = health_result.get("data", {})
             status = health_data.get("status", "unknown")
             is_healthy = status.lower() in ["healthy", "ok", "good"]
-            
+
             if is_healthy:
                 explanation = (
                     f"Route is healthy. MCP responded with status '{status}'. "
@@ -698,32 +696,33 @@ class LifAgent:
                     f"This may indicate solver downtime or liquidity issues on this route."
                 )
                 action = "Check solver inventory for active quotes. Consider alternative routes if no quotes are available."
-            
+
             report["checks"].append({
                 "name": "Route Health",
                 "status": status,
-                "details": health_data,
                 "passed": is_healthy,
+                "details": health_data if isinstance(health_data, dict) else {"raw": health_data},
                 "explanation": explanation,
-                "action": action
+                "action": action,
+                "duration_ms": int((time.time() - check_start) * 1000),
             })
         except Exception as e:
             report["checks"].append({
                 "name": "Route Health",
                 "status": "error",
-                "details": str(e),
                 "passed": False,
+                "details": {"error": str(e)},
                 "explanation": f"Failed to check route health: {e}. The MCP endpoint may be unreachable.",
-                "action": "Run 'doctor' to diagnose MCP connectivity issues."
+                "action": "Run 'doctor' to diagnose MCP connectivity issues.",
+                "duration_ms": int((time.time() - check_start) * 1000),
             })
-        
+
         # ── Check 2: Quote Availability ───────────────────────────
+        check_start = time.time()
         try:
-            # Get supported routes to check if route exists
             routes_result = self.get_routes()
             route_list = routes_result.get("data", {}).get("routes", [])
-            
-            # Find matching routes
+
             matching_routes = []
             for r in route_list:
                 r_from = str(r.get("fromChainId", r.get("fromChain", ""))).lower()
@@ -731,9 +730,9 @@ class LifAgent:
                 if (r_from in (from_chain.lower(), CHAINS.get(from_chain.lower(), {}).get("id", ""))
                     and r_to in (to_chain.lower(), CHAINS.get(to_chain.lower(), {}).get("id", ""))):
                     matching_routes.append(r)
-            
+
             quote_available = len(matching_routes) > 0
-            
+
             if quote_available:
                 explanation = (
                     f"Found {len(matching_routes)} supported route(s) for {from_chain} → {to_chain}. "
@@ -746,35 +745,38 @@ class LifAgent:
                     f"This may mean the chain pair is not yet supported, or token addresses don't match."
                 )
                 action = "Check 'get-supported-routes' for available chain pairs. Try different token addresses."
-            
+
             report["checks"].append({
                 "name": "Quote Availability",
                 "status": "available" if quote_available else "unavailable",
+                "passed": quote_available,
                 "details": {
                     "matching_routes": len(matching_routes),
-                    "routes": matching_routes[:3]  # Show first 3
+                    "routes": matching_routes[:3],
                 },
-                "passed": quote_available,
                 "explanation": explanation,
-                "action": action
+                "action": action,
+                "duration_ms": int((time.time() - check_start) * 1000),
             })
         except Exception as e:
             report["checks"].append({
                 "name": "Quote Availability",
                 "status": "error",
-                "details": str(e),
                 "passed": False,
+                "details": {"error": str(e)},
                 "explanation": f"Failed to check quote availability: {e}.",
-                "action": "Run 'doctor' to diagnose MCP connectivity."
+                "action": "Run 'doctor' to diagnose MCP connectivity.",
+                "duration_ms": int((time.time() - check_start) * 1000),
             })
-        
+
         # ── Check 3: Solver Inventory ─────────────────────────────
+        check_start = time.time()
         try:
             if from_asset and to_asset:
                 inventory_result = self.get_quote_inventory(from_chain, to_chain, from_asset, to_asset)
                 inventory_data = inventory_result.get("data", {})
                 quotes = inventory_data.get("quotes", [])
-                
+
                 if quotes:
                     explanation = (
                         f"Found {len(quotes)} standing quote(s) in solver inventory. "
@@ -787,41 +789,44 @@ class LifAgent:
                         f"This doesn't mean quotes won't work — solvers may still respond to on-demand requests."
                     )
                     action = "Try 'request-quote' anyway. If it fails, the solver may need time to provision liquidity."
-                
+
                 report["checks"].append({
                     "name": "Solver Inventory",
                     "status": "active" if quotes else "empty",
+                    "passed": len(quotes) > 0,
                     "details": {
                         "quote_count": len(quotes),
-                        "quotes": quotes[:3]  # Show first 3
+                        "quotes": quotes[:3],
                     },
-                    "passed": len(quotes) > 0,
                     "explanation": explanation,
-                    "action": action
+                    "action": action,
+                    "duration_ms": int((time.time() - check_start) * 1000),
                 })
             else:
                 report["checks"].append({
                     "name": "Solver Inventory",
                     "status": "skipped",
-                    "details": "No asset pair specified",
                     "passed": True,
+                    "details": {"reason": "No asset pair specified"},
                     "explanation": "Asset pair not specified — cannot check solver inventory.",
-                    "action": "Provide from_asset and to_asset parameters to check inventory."
+                    "action": "Provide from_asset and to_asset parameters to check inventory.",
+                    "duration_ms": int((time.time() - check_start) * 1000),
                 })
         except Exception as e:
             report["checks"].append({
                 "name": "Solver Inventory",
                 "status": "error",
-                "details": str(e),
                 "passed": False,
+                "details": {"error": str(e)},
                 "explanation": f"Failed to check solver inventory: {e}.",
-                "action": "Run 'doctor' to diagnose MCP connectivity."
+                "action": "Run 'doctor' to diagnose MCP connectivity.",
+                "duration_ms": int((time.time() - check_start) * 1000),
             })
-        
+
         # ── Summary ───────────────────────────────────────────────
         passed_checks = sum(1 for c in report["checks"] if c["passed"])
         total_checks = len(report["checks"])
-        
+
         report["summary"] = {
             "total_checks": total_checks,
             "passed_checks": passed_checks,
@@ -829,7 +834,7 @@ class LifAgent:
             "health_status": report["checks"][0]["status"] if report["checks"] else "unknown",
             "overall_status": "healthy" if passed_checks == total_checks else "degraded"
         }
-        
+
         return report
 
     def explain(self, text: str) -> dict:
@@ -905,6 +910,7 @@ class LifAgent:
             "policy": {
                 "max_fee_pct": policy.max_fee_pct,
                 "min_output_amount": policy.min_output_amount,
+                "max_slippage": policy.max_slippage,
                 "require_healthy_route": policy.require_healthy_route,
                 "avoid_chains": policy.avoid_chains,
                 "allow_cross_chain": policy.allow_cross_chain,

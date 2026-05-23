@@ -113,7 +113,7 @@ def parse_amount_with_symbol(amount_str: str) -> float:
     """
     try:
         cleaned = amount_str.strip()
-        for symbol in ['USDC', 'USDT', 'ETH', 'WETH', 'DAI']:
+        for symbol in ['USDC', 'USDT', 'WETH', 'ETH', 'DAI']:
             cleaned = cleaned.replace(f' {symbol}', '').replace(symbol, '')
         cleaned = cleaned.strip()
         return float(cleaned)

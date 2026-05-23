@@ -277,6 +277,65 @@ async def route_health(from_chain: str, to_chain: str):
     return result
 
 
+# ── Presets ──────────────────────────────────────────────────────────
+
+PRESETS = {
+    "safe-transfer": {
+        "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
+        "policy": {"max_fee_pct": 0.5, "require_healthy_route": False},
+        "description": "Standard Base → Arbitrum USDC transfer with a 0.5% fee cap.",
+    },
+    "fee-check": {
+        "intent": {"from_chain": "ethereum", "to_chain": "base", "token": "USDC", "amount": "100"},
+        "policy": {"max_fee_pct": 0.3},
+        "description": "Ethereum → Base transfer with strict 0.3% fee limit to test fee policy enforcement.",
+    },
+    "health-check": {
+        "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
+        "policy": {"require_healthy_route": True},
+        "description": "Route health enforcement — refuses if solvers report unhealthy.",
+    },
+    "avoid-chain": {
+        "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
+        "policy": {"avoid_chains": ["ethereum", "polygon"], "max_fee_pct": 1.0},
+        "description": "Avoids Ethereum and Polygon, allowing only direct L2-to-L2 routes.",
+    },
+    "cheapest-route": {
+        "intent": {"from_chain": "ethereum", "to_chain": "arbitrum", "token": "USDC", "amount": "50"},
+        "policy": {"prefer_cheapest": True, "max_fee_pct": 1.0},
+        "description": "Prefers the cheapest route across chains with a 1% fee ceiling.",
+    },
+    "no-quote": {
+        "intent": {"from_chain": "base", "to_chain": "zksync", "token": "USDC", "amount": "5"},
+        "policy": {"require_quote": True, "max_fee_pct": 0.5},
+        "description": "Tests an unusual chain pair — expected to fail gracefully with no-quote handling.",
+    },
+}
+
+
+@app.get("/api/presets")
+async def list_presets():
+    """List all available demo presets."""
+    return {
+        "presets": [
+            {"name": name, "description": p["description"]}
+            for name, p in PRESETS.items()
+        ]
+    }
+
+
+@app.get("/api/preset/{name}")
+async def get_preset(name: str):
+    """Return a pre-configured intent + policy for a demo scenario."""
+    preset = PRESETS.get(name)
+    if not preset:
+        return JSONResponse(
+            {"error": f"Unknown preset: {name}", "available": list(PRESETS.keys())},
+            status_code=404,
+        )
+    return preset
+
+
 @app.post("/api/explain")
 async def explain_intent(request: Request):
     """Explain intent without executing — shows parsed intent, policy, and execution plan."""
