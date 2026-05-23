@@ -256,7 +256,7 @@ The CLI has two modes: **Local MCP** (primary) and **Mock** (fallback). On start
 To force mock mode even when the MCP server is running:
 
 ```bash
-export LIFI_AGENT_DEMO_MODE=1
+export LIFI_AGENT_MOCK_MODE=1
 ```
 
 ### Key differences (Local vs Hosted)

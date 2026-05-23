@@ -72,7 +72,7 @@ class TestServerInfoParsing:
 
 class TestMockMode:
     def test_demo_mode_env_activates_mock(self, monkeypatch):
-        monkeypatch.setenv("LIFI_AGENT_DEMO_MODE", "1")
+        monkeypatch.setenv("LIFI_AGENT_MOCK_MODE", "1")
         client = MCPClient()
         assert client.is_mock_mode() is True
 
@@ -82,14 +82,14 @@ class TestMockMode:
         assert client.is_mock_mode() is True
 
     def test_mock_returns_routes(self, monkeypatch):
-        monkeypatch.setenv("LIFI_AGENT_DEMO_MODE", "1")
+        monkeypatch.setenv("LIFI_AGENT_MOCK_MODE", "1")
         client = MCPClient()
         result = client.call("get-supported-routes", {})
         assert isinstance(result, list)
         assert len(result) > 0
 
     def test_mock_returns_quote(self, monkeypatch):
-        monkeypatch.setenv("LIFI_AGENT_DEMO_MODE", "1")
+        monkeypatch.setenv("LIFI_AGENT_MOCK_MODE", "1")
         client = MCPClient()
         result = client.call("request-quote", {"amount": "10", "fromToken": "USDC", "toToken": "USDC"})
         quotes = result.get("data", {}).get("quotes", [])
@@ -97,13 +97,13 @@ class TestMockMode:
         assert "outputAmount" in quotes[0]
 
     def test_mock_returns_health(self, monkeypatch):
-        monkeypatch.setenv("LIFI_AGENT_DEMO_MODE", "1")
+        monkeypatch.setenv("LIFI_AGENT_MOCK_MODE", "1")
         client = MCPClient()
         result = client.call("check-route-health", {})
         assert result["data"]["healthy"] is True
 
     def test_mock_connect(self, monkeypatch):
-        monkeypatch.setenv("LIFI_AGENT_DEMO_MODE", "1")
+        monkeypatch.setenv("LIFI_AGENT_MOCK_MODE", "1")
         client = MCPClient()
         info = client.connect()
         assert "serverInfo" in info
@@ -113,7 +113,7 @@ class TestMockMode:
 
 class TestCaching:
     def test_cache_hit(self, monkeypatch):
-        monkeypatch.setenv("LIFI_AGENT_DEMO_MODE", "1")
+        monkeypatch.setenv("LIFI_AGENT_MOCK_MODE", "1")
         client = MCPClient()
         # First call populates cache
         result1 = client.call("request-quote", {"amount": "10"}, use_cache=True)
@@ -122,7 +122,7 @@ class TestCaching:
         assert result1 == result2
 
     def test_cache_disabled(self, monkeypatch):
-        monkeypatch.setenv("LIFI_AGENT_DEMO_MODE", "1")
+        monkeypatch.setenv("LIFI_AGENT_MOCK_MODE", "1")
         client = MCPClient()
         result1 = client.call("request-quote", {"amount": "10"}, use_cache=False)
         result2 = client.call("request-quote", {"amount": "10"}, use_cache=False)
@@ -131,7 +131,7 @@ class TestCaching:
         assert "data" in result2 or "error" in result2
 
     def test_cleanup_expired(self, monkeypatch):
-        monkeypatch.setenv("LIFI_AGENT_DEMO_MODE", "1")
+        monkeypatch.setenv("LIFI_AGENT_MOCK_MODE", "1")
         client = MCPClient()
         # Manually insert an expired entry
         client._cache["expired:key"] = (time.time() - 600, {"stale": True})
@@ -141,7 +141,7 @@ class TestCaching:
         assert "fresh:key" in client._cache
 
     def test_cleanup_max_size(self, monkeypatch):
-        monkeypatch.setenv("LIFI_AGENT_DEMO_MODE", "1")
+        monkeypatch.setenv("LIFI_AGENT_MOCK_MODE", "1")
         client = MCPClient()
         # Fill cache beyond max
         for i in range(205):
@@ -177,14 +177,14 @@ class TestRateLimiting:
 
 class TestContextManager:
     def test_sync_context_manager(self, monkeypatch):
-        monkeypatch.setenv("LIFI_AGENT_DEMO_MODE", "1")
+        monkeypatch.setenv("LIFI_AGENT_MOCK_MODE", "1")
         with MCPClient() as client:
             assert client._connected is True
             result = client.call("get-supported-routes", {})
             assert isinstance(result, list)
 
     def test_close_resets_state(self, monkeypatch):
-        monkeypatch.setenv("LIFI_AGENT_DEMO_MODE", "1")
+        monkeypatch.setenv("LIFI_AGENT_MOCK_MODE", "1")
         client = MCPClient()
         client.connect()
         assert client._connected is True

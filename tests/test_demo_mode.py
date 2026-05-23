@@ -1,4 +1,4 @@
-"""Tests for demo mode (LIFI_AGENT_DEMO_MODE=1)."""
+"""Tests for mock mode (LIFI_AGENT_MOCK_MODE=1)."""
 
 import os
 import pytest
@@ -6,7 +6,7 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def enable_demo_mode(monkeypatch):
-    monkeypatch.setenv("LIFI_AGENT_DEMO_MODE", "1")
+    monkeypatch.setenv("LIFI_AGENT_MOCK_MODE", "1")
 
 
 class TestDemoModeVerdict:

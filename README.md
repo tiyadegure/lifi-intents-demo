@@ -60,7 +60,7 @@ The CLI supports two modes and automatically selects the best one on startup:
 To force mock mode regardless of server availability:
 
 ```bash
-export LIFI_AGENT_DEMO_MODE=1
+export LIFI_AGENT_MOCK_MODE=1
 ```
 
 The CLI prints which mode is active on startup.

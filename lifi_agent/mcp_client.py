@@ -126,7 +126,7 @@ class MCPClient:
 
     def _init_session_sync(self) -> str:
         """Initialize a new MCP session (sync). Returns session ID."""
-        if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1" or self._mock_mode:
+        if os.environ.get("LIFI_AGENT_MOCK_MODE") == "1" or self._mock_mode:
             self._connected = True
             return "demo-session"
         try:
@@ -154,7 +154,7 @@ class MCPClient:
 
     async def _init_session_async(self) -> str:
         """Initialize a new MCP session (async). Returns session ID."""
-        if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1" or self._mock_mode:
+        if os.environ.get("LIFI_AGENT_MOCK_MODE") == "1" or self._mock_mode:
             self._connected = True
             return "demo-session"
         try:
@@ -183,7 +183,7 @@ class MCPClient:
 
     def connect(self) -> dict:
         """Initialize MCP session (sync). Returns server info."""
-        if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1":
+        if os.environ.get("LIFI_AGENT_MOCK_MODE") == "1":
             self._mock_mode = True
             self._connected = True
             return {'serverInfo': {'name': 'lifi-intents-demo', 'version': '1.0.0'}}
@@ -211,7 +211,7 @@ class MCPClient:
 
     async def connect_async(self) -> dict:
         """Initialize MCP session (async). Returns server info."""
-        if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1":
+        if os.environ.get("LIFI_AGENT_MOCK_MODE") == "1":
             self._mock_mode = True
             self._connected = True
             return {'serverInfo': {'name': 'lifi-intents-demo', 'version': '1.0.0'}}
@@ -239,7 +239,7 @@ class MCPClient:
             return {'serverInfo': {'name': 'lifi-intents-demo', 'version': '1.0.0'}}
 
     def _demo_call(self, tool: str, args: dict = None) -> dict:
-        """Return mock data for demo mode. Set LIFI_AGENT_DEMO_MODE=1 to activate."""
+        """Return mock data for mock mode. Set LIFI_AGENT_MOCK_MODE=1 to activate."""
         args = args or {}
 
         if tool == "get-supported-routes":
@@ -301,7 +301,7 @@ class MCPClient:
     def call(self, tool: str, args: dict = None, use_cache: bool = True, retries: int = 2) -> dict:
         """Call an MCP tool (sync) with rate limiting, connection pooling, caching, and retry."""
         # Demo/mock mode: return mock data without hitting real MCP
-        if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1" or self._mock_mode:
+        if os.environ.get("LIFI_AGENT_MOCK_MODE") == "1" or self._mock_mode:
             return self._demo_call(tool, args)
 
         self._cleanup_cache()
@@ -362,7 +362,7 @@ class MCPClient:
         """Call an MCP tool (async) with rate limiting, connection pooling, caching, and retry.
         Supports parallel calls via asyncio.gather()."""
         # Demo/mock mode: return mock data without hitting real MCP
-        if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1" or self._mock_mode:
+        if os.environ.get("LIFI_AGENT_MOCK_MODE") == "1" or self._mock_mode:
             return self._demo_call(tool, args)
 
         self._cleanup_cache()
@@ -426,7 +426,7 @@ class MCPClient:
 
     def is_mock_mode(self) -> bool:
         """Check if client is running in mock/fallback mode."""
-        return self._mock_mode or os.environ.get("LIFI_AGENT_DEMO_MODE") == "1"
+        return self._mock_mode or os.environ.get("LIFI_AGENT_MOCK_MODE") == "1"
 
     def close(self):
         """Close sync client."""

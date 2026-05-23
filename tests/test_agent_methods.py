@@ -1,7 +1,7 @@
 """Tests for agent methods: get_quote, compare_quotes, explain, doctor."""
 
 import os
-os.environ["LIFI_AGENT_DEMO_MODE"] = "1"
+os.environ["LIFI_AGENT_MOCK_MODE"] = "1"
 
 import pytest
 from lifi_agent.agent import LifAgent, Intent, Policy

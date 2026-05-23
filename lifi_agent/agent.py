@@ -929,15 +929,45 @@ class LifAgent:
             "checks": [],
             "warnings": []
         }
-        
+
+        # ── Check 0: Operating Mode ─────────────────────────────
+        mock_mode = self.mcp.is_mock_mode()
+        if mock_mode:
+            forced = os.environ.get("LIFI_AGENT_MOCK_MODE") == "1"
+            if forced:
+                detail = "Mock fallback active (LIFI_AGENT_MOCK_MODE=1)"
+            else:
+                detail = "Mock fallback active (local MCP unreachable)"
+            report["checks"].append({
+                "name": "Operating Mode",
+                "status": "MOCK",
+                "passed": True,
+                "detail": detail
+            })
+        else:
+            report["checks"].append({
+                "name": "Operating Mode",
+                "status": "LOCAL",
+                "passed": True,
+                "detail": "Connected to local MCP server"
+            })
+
         # ── Check 1: MCP endpoint reachable ───────────────────────
         try:
             # Try to connect to MCP
             info = self.mcp.connect()
+            if mock_mode:
+                forced = os.environ.get("LIFI_AGENT_MOCK_MODE") == "1"
+                if forced:
+                    detail = "Force mock mode (LIFI_AGENT_MOCK_MODE=1)"
+                else:
+                    detail = "Local MCP unreachable, auto-fallback to mock mode"
+            else:
+                detail = f"Connected to {info.get('serverInfo', {}).get('name', 'unknown')}"
             report["checks"].append({
                 "name": "MCP endpoint reachable",
                 "passed": True,
-                "detail": f"Connected to {info.get('serverInfo', {}).get('name', 'unknown')}"
+                "detail": detail
             })
         except Exception as e:
             report["checks"].append({
@@ -1103,6 +1133,11 @@ def interactive():
     try:
         info = agent.connect()
         status_ok(info)
+        if agent.mcp.is_mock_mode():
+            console.print("  [yellow]⚡ Mock Mode — using simulated data[/yellow]")
+        else:
+            server_name = info.split("Connected to ")[-1].split(" v")[0] if "Connected to" in info else "local MCP"
+            console.print(f"  [green]✓ Local MCP Mode — connected to {server_name}[/green]")
     except Exception as e:
         status_err(f"Connection failed: {e}")
         console.print("  [dim]Running in offline mode (cached data only)[/dim]")
