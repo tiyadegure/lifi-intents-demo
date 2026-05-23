@@ -235,6 +235,33 @@ Building on LI.FI Intents MCP requires careful handling of:
 
 These pitfalls are common but solvable. The key is to implement robust error handling and provide clear feedback to developers.
 
+## 11. Local vs Hosted MCP Server
+
+**Problem:** The hosted LI.FI Intents MCP server uses session management, which can cause "No valid session ID" errors and other session-related issues.
+
+**Solution:** Run the MCP server locally in stateless HTTP mode.
+
+| | Local | Hosted |
+|---|---|---|
+| Mode | Stateless HTTP (no session ID) | Session-based |
+| API params | Friendly: `fromChain` (slug), `fromToken` (symbol), `amount` (human-readable) | Raw chain IDs, contract addresses, base units |
+| Reliability | High — no session expiry | Can return 403, session timeouts |
+| Setup | `PORT=3333 node dist/transport-http.js` | No setup needed |
+
+**Key differences:**
+- Local runs in **stateless mode** — no session ID needed, the client handles this automatically
+- Local uses **friendly params**: chain slugs (`Base`), token symbols (`USDC`), human-readable amounts (`10`)
+- Hosted testnet may return **403 errors** without explanation
+- The **solver network can be temporarily offline**, causing all quotes to return empty — this is not a bug, just wait and retry later
+- **Session re-init** is not needed with the local server; the client skips it automatically
+
+**Setup:**
+```bash
+git clone https://github.com/lifinance/lifi-intents-mcp
+cd lifi-intents-mcp && npm install && npm run build
+PORT=3333 node dist/transport-http.js
+```
+
 ---
 
 *Last updated: May 2026*

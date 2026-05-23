@@ -46,6 +46,29 @@ The parser uses a **deterministic regex engine** by default, with optional LLM f
 
 ---
 
+## Local MCP Server Setup
+
+The LI.FI Intents MCP server can run locally in stateless HTTP mode, which is more reliable than the hosted version (which has session management issues).
+
+```bash
+# Clone and build the MCP server
+git clone https://github.com/lifinance/lifi-intents-mcp
+cd lifi-intents-mcp
+npm install
+npm run build
+
+# Run in stateless HTTP mode
+PORT=3333 node dist/transport-http.js
+```
+
+The server starts at `http://localhost:3333/mcp`. This is already the default URL in this project (`LIFI_MCP_URL` env var).
+
+**Why run locally?** The hosted version uses session management that can cause "No valid session ID" errors. The local stateless mode avoids this entirely.
+
+**Note:** The solver network may be temporarily offline, causing all quotes to return empty. This is not a bug — it's a known transient state.
+
+---
+
 ## Quick start
 
 ```bash

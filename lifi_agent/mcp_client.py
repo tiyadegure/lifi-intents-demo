@@ -125,6 +125,9 @@ class MCPClient:
 
     def _init_session_sync(self) -> str:
         """Initialize a new MCP session (sync). Returns session ID."""
+        if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1":
+            self._connected = True
+            return "demo-session"
         r = self.client.post(self.url,
             json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
                 "protocolVersion": "2025-03-26", "capabilities": {},
@@ -144,6 +147,9 @@ class MCPClient:
 
     async def _init_session_async(self) -> str:
         """Initialize a new MCP session (async). Returns session ID."""
+        if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1":
+            self._connected = True
+            return "demo-session"
         ac = await self._get_async_client()
         r = await ac.post(self.url,
             json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
@@ -164,6 +170,9 @@ class MCPClient:
 
     def connect(self) -> dict:
         """Initialize MCP session (sync). Returns server info."""
+        if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1":
+            self._connected = True
+            return {'serverInfo': {'name': 'lifi-intents-demo', 'version': '1.0.0'}}
         r = self.client.post(self.url,
             json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
                 "protocolVersion": "2025-03-26", "capabilities": {},
@@ -182,6 +191,9 @@ class MCPClient:
 
     async def connect_async(self) -> dict:
         """Initialize MCP session (async). Returns server info."""
+        if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1":
+            self._connected = True
+            return {'serverInfo': {'name': 'lifi-intents-demo', 'version': '1.0.0'}}
         ac = await self._get_async_client()
         r = await ac.post(self.url,
             json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
