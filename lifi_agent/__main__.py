@@ -1,5 +1,9 @@
 from .agent import interactive, LifAgent
+from rich.console import Console
+from rich.syntax import Syntax
 import sys, json
+
+console = Console()
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
@@ -8,19 +12,25 @@ if __name__ == "__main__":
 
         if text == "doctor":
             report = agent.doctor()
-            print(json.dumps(report, indent=2))
+            json_str = json.dumps(report, indent=2)
+            console.print(Syntax(json_str, "json", theme="monokai"))
         elif text.startswith("explain "):
-            result = agent.explain(text[8:])
-            print(json.dumps(result, indent=2))
+            try:
+                result = agent.explain(text[8:])
+                json_str = json.dumps(result, indent=2)
+                console.print(Syntax(json_str, "json", theme="monokai"))
+            except ValueError as e:
+                console.print(f"[red]Error:[/red] {e}")
         elif text.startswith("safe "):
             from .agent import parse_intent_with_policy
             agent.connect()
             try:
                 intent, policy = parse_intent_with_policy(text[5:])
                 result = agent.safe_verdict_trace(intent, policy)
-                print(json.dumps(result, default=lambda o: o.__dict__, indent=2))
+                json_str = json.dumps(result, default=lambda o: o.__dict__, indent=2)
+                console.print(Syntax(json_str, "json", theme="monokai"))
             except ValueError as e:
-                print(f"Error: {e}")
+                console.print(f"[red]Error:[/red] {e}")
             finally:
                 agent.close()
         else:
@@ -29,9 +39,10 @@ if __name__ == "__main__":
             try:
                 intent = parse_intent(text)
                 result = agent.get_quote(intent)
-                print(json.dumps(result, indent=2))
+                json_str = json.dumps(result, indent=2)
+                console.print(Syntax(json_str, "json", theme="monokai"))
             except ValueError as e:
-                print(f"Error: {e}")
+                console.print(f"[red]Error:[/red] {e}")
             finally:
                 agent.close()
     else:

@@ -932,25 +932,26 @@ class LifAgent:
 
         # ── Check 0: Operating Mode ─────────────────────────────
         mock_mode = self.mcp.is_mock_mode()
+        strict_mode = MCPClient.is_strict_mode()
         if mock_mode:
-            forced = os.environ.get("LIFI_AGENT_MOCK_MODE") == "1"
-            if forced:
-                detail = "Mock fallback active (LIFI_AGENT_MOCK_MODE=1)"
-            else:
-                detail = "Mock fallback active (local MCP unreachable)"
-            report["checks"].append({
-                "name": "Operating Mode",
-                "status": "MOCK",
-                "passed": True,
-                "detail": detail
-            })
+            source = self.mcp.mock_mode_source()
+            detail = f"Mock mode active — source: {source}"
+            status = "MOCK"
+            if strict_mode:
+                status = "STRICT"
+                detail += " (strict mode violation!)"
+        elif strict_mode:
+            status = "STRICT"
+            detail = "Strict mode enabled — connected to local MCP, no fallback allowed"
         else:
-            report["checks"].append({
-                "name": "Operating Mode",
-                "status": "LOCAL",
-                "passed": True,
-                "detail": "Connected to local MCP server"
-            })
+            status = "LOCAL"
+            detail = "Connected to local MCP server"
+        report["checks"].append({
+            "name": "Operating Mode",
+            "status": status,
+            "passed": True,
+            "detail": detail
+        })
 
         # ── Check 1: MCP endpoint reachable ───────────────────────
         try:
@@ -1070,10 +1071,16 @@ class LifAgent:
             # Try to get a quote with a small amount
             quote_result = self.get_quote(Intent("base", "arbitrum", "usdc", "1"))
             if "error" not in quote_result:
+                quotes = quote_result.get("data", {}).get("quotes", [])
+                if quotes:
+                    q = quotes[0]
+                    detail = f"Quote received — input: {q.get('inputAmount', '?')}, output: {q.get('outputAmount', '?')}, id: {q.get('quoteId', '?')[:16]}..."
+                else:
+                    detail = "Quote received but no quotes in response"
                 report["checks"].append({
                     "name": "request-quote works",
                     "passed": True,
-                    "detail": "Quote received"
+                    "detail": detail
                 })
             else:
                 report["checks"].append({
@@ -1086,6 +1093,140 @@ class LifAgent:
                 "name": "request-quote works",
                 "passed": False,
                 "detail": str(e)
+            })
+
+        # ── Check 8: MCP Protocol handshake ───────────────────────
+        try:
+            if mock_mode:
+                report["checks"].append({
+                    "name": "MCP Protocol",
+                    "passed": True,
+                    "detail": "Skipped (mock mode)"
+                })
+            else:
+                protocol_version = "2025-03-26"
+                init_result = self.mcp.client.post(
+                    self.mcp.url,
+                    json={"jsonrpc": "2.0", "id": 99, "method": "initialize", "params": {
+                        "protocolVersion": protocol_version, "capabilities": {},
+                        "clientInfo": {"name": "lifi-agent-doctor", "version": "1.0"}}},
+                    headers={"Content-Type": "application/json", "Accept": "application/json, text/event-stream"},
+                    timeout=self.mcp.timeout
+                )
+                if init_result.status_code == 200:
+                    server_info = MCPClient._parse_server_info(init_result.text)
+                    info = server_info.get("serverInfo", {})
+                    report["checks"].append({
+                        "name": "MCP Protocol",
+                        "passed": True,
+                        "detail": f"Protocol {protocol_version}, server: {info.get('name', '?')} v{info.get('version', '?')}"
+                    })
+                else:
+                    report["checks"].append({
+                        "name": "MCP Protocol",
+                        "passed": False,
+                        "detail": f"HTTP {init_result.status_code}"
+                    })
+        except Exception as e:
+            report["checks"].append({
+                "name": "MCP Protocol",
+                "passed": False,
+                "detail": str(e)
+            })
+
+        # ── Check 9: Available Tools ──────────────────────────────
+        try:
+            if mock_mode:
+                tools = ["get-supported-routes", "request-quote", "check-route-health",
+                         "prepare-order", "track-order", "list-orders", "get-solver-identities",
+                         "get-quote-inventory", "submit-standing-quotes"]
+                report["checks"].append({
+                    "name": "Available Tools",
+                    "passed": True,
+                    "detail": f"{len(tools)} tools (mock): {', '.join(tools[:5])}..."
+                })
+            else:
+                tools_result = self.mcp.client.post(
+                    self.mcp.url,
+                    json={"jsonrpc": "2.0", "id": 98, "method": "tools/list", "params": {}},
+                    headers=self.mcp._headers(),
+                    timeout=self.mcp.timeout
+                )
+                if tools_result.status_code == 200:
+                    parsed = MCPClient._parse_sse(tools_result.text)
+                    if "error" not in parsed:
+                        tool_list = parsed.get("tools", [])
+                        tool_names = [t.get("name", "?") for t in tool_list]
+                        report["checks"].append({
+                            "name": "Available Tools",
+                            "passed": True,
+                            "detail": f"{len(tool_names)} tools: {', '.join(tool_names[:5])}{'...' if len(tool_names) > 5 else ''}"
+                        })
+                    else:
+                        report["checks"].append({
+                            "name": "Available Tools",
+                            "passed": True,
+                            "detail": "Tools list returned (parsed as non-standard format)"
+                        })
+                else:
+                    report["checks"].append({
+                        "name": "Available Tools",
+                        "passed": False,
+                        "detail": f"HTTP {tools_result.status_code}"
+                    })
+        except Exception as e:
+            report["checks"].append({
+                "name": "Available Tools",
+                "passed": False,
+                "detail": str(e)
+            })
+
+        # ── Check 10: Quote Test (small amount) ───────────────────
+        try:
+            quote_args = {
+                "fromChain": "base",
+                "toChain": "arbitrum",
+                "fromToken": "USDC",
+                "toToken": "USDC",
+                "amount": "1",
+                "userAddress": DEMO_ADDRESS,
+            }
+            result = self.mcp.call("request-quote", quote_args)
+            if "error" not in result:
+                quotes = result.get("data", {}).get("quotes", [])
+                if quotes:
+                    q = quotes[0]
+                    report["checks"].append({
+                        "name": "Quote Test",
+                        "passed": True,
+                        "detail": f"1 USDC Base→Arbitrum: output {q.get('outputAmount', '?')}, solver responded"
+                    })
+                else:
+                    report["checks"].append({
+                        "name": "Quote Test",
+                        "passed": False,
+                        "detail": "No quotes returned for 1 USDC Base→Arbitrum"
+                    })
+            else:
+                report["checks"].append({
+                    "name": "Quote Test",
+                    "passed": False,
+                    "detail": result.get("error", "Unknown error")
+                })
+        except Exception as e:
+            report["checks"].append({
+                "name": "Quote Test",
+                "passed": False,
+                "detail": str(e)
+            })
+
+        # ── Check 11: Mock Mode Source ────────────────────────────
+        if mock_mode:
+            source = self.mcp.mock_mode_source()
+            report["checks"].append({
+                "name": "Mock Mode Source",
+                "passed": True,
+                "detail": source
             })
         
         # ── Warnings ──────────────────────────────────────────────

@@ -284,31 +284,49 @@ PRESETS = {
         "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
         "policy": {"max_fee_pct": 0.5, "require_healthy_route": False},
         "description": "Standard Base → Arbitrum USDC transfer with a 0.5% fee cap.",
+        "category": "success",
     },
     "fee-check": {
         "intent": {"from_chain": "ethereum", "to_chain": "base", "token": "USDC", "amount": "100"},
         "policy": {"max_fee_pct": 0.3},
         "description": "Ethereum → Base transfer with strict 0.3% fee limit to test fee policy enforcement.",
+        "category": "success",
     },
     "health-check": {
         "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
         "policy": {"require_healthy_route": True},
         "description": "Route health enforcement — refuses if solvers report unhealthy.",
+        "category": "success",
     },
     "avoid-chain": {
         "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
         "policy": {"avoid_chains": ["ethereum", "polygon"], "max_fee_pct": 1.0},
         "description": "Avoids Ethereum and Polygon, allowing only direct L2-to-L2 routes.",
+        "category": "success",
     },
     "cheapest-route": {
         "intent": {"from_chain": "ethereum", "to_chain": "arbitrum", "token": "USDC", "amount": "50"},
         "policy": {"prefer_cheapest": True, "max_fee_pct": 1.0},
         "description": "Prefers the cheapest route across chains with a 1% fee ceiling.",
+        "category": "success",
     },
     "no-quote": {
         "intent": {"from_chain": "base", "to_chain": "zksync", "token": "USDC", "amount": "5"},
         "policy": {"require_quote": True, "max_fee_pct": 0.5},
         "description": "Tests an unusual chain pair — expected to fail gracefully with no-quote handling.",
+        "category": "failure",
+    },
+    "strict-fee-check": {
+        "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
+        "policy": {"max_fee_pct": 0.1},
+        "description": "Fee limit set to 0.1% — likely to fail since solver fees are typically ~0.2%.",
+        "category": "failure",
+    },
+    "multi-constraint": {
+        "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
+        "policy": {"max_fee_pct": 0.5, "avoid_chains": ["ethereum", "polygon"], "min_output_amount": 9.5},
+        "description": "Combines fee cap, avoid chains, and minimum output — tests multiple policy checks at once.",
+        "category": "edge-case",
     },
 }
 
@@ -318,7 +336,7 @@ async def list_presets():
     """List all available demo presets."""
     return {
         "presets": [
-            {"name": name, "description": p["description"]}
+            {"name": name, "description": p["description"], "intent": p["intent"], "policy": p["policy"], "category": p.get("category", "success")}
             for name, p in PRESETS.items()
         ]
     }
