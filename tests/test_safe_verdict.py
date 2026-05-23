@@ -22,21 +22,21 @@ def _mock_mcp_routes(agent, routes=None):
     """Configure mock to return supported routes."""
     if routes is None:
         routes = [
-            {"fromChainId": 8453, "toChainId": 42161,
-             "fromToken": {"address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}},
+            {"fromChainId": 8453, "toChainId": 42161, "fromChain": "Base", "toChain": "Arbitrum",
+             "fromToken": {"symbol": "USDC", "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}},
         ]
 
     def side_effect(tool, args=None):
         if tool == "get-supported-routes":
-            return {"data": {"routes": routes}}
+            return routes  # Real MCP returns flat list
         if tool == "check-route-health":
             return {"data": {"healthy": True, "status": "healthy"}}
         if tool == "request-quote":
             return {
                 "data": {
                     "quotes": [{
-                        "inputAmount": "10000000",
-                        "outputAmount": "9980000",
+                        "inputAmount": "10 USDC",
+                        "outputAmount": "9.980000 USDC",
                         "quoteId": "test-quote-001",
                     }]
                 }
@@ -50,10 +50,10 @@ def _mock_mcp_no_quote(agent):
     """Configure mock to return no quotes."""
     def side_effect(tool, args=None):
         if tool == "get-supported-routes":
-            return {"data": {"routes": [
-                {"fromChainId": 8453, "toChainId": 42161,
-                 "fromToken": {"address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}},
-            ]}}
+            return [
+                {"fromChainId": 8453, "toChainId": 42161, "fromChain": "Base", "toChain": "Arbitrum",
+                 "fromToken": {"symbol": "USDC", "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}},
+            ]
         if tool == "check-route-health":
             return {"data": {"healthy": True, "status": "healthy"}}
         if tool == "request-quote":
@@ -67,18 +67,18 @@ def _mock_mcp_unhealthy(agent):
     """Configure mock to return unhealthy route."""
     def side_effect(tool, args=None):
         if tool == "get-supported-routes":
-            return {"data": {"routes": [
-                {"fromChainId": 8453, "toChainId": 42161,
-                 "fromToken": {"address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}},
-            ]}}
+            return [
+                {"fromChainId": 8453, "toChainId": 42161, "fromChain": "Base", "toChain": "Arbitrum",
+                 "fromToken": {"symbol": "USDC", "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}},
+            ]
         if tool == "check-route-health":
             return {"data": {"healthy": False, "status": "unhealthy"}}
         if tool == "request-quote":
             return {
                 "data": {
                     "quotes": [{
-                        "inputAmount": "10000000",
-                        "outputAmount": "9980000",
+                        "inputAmount": "10 USDC",
+                        "outputAmount": "9.980000 USDC",
                         "quoteId": "test-quote-001",
                     }]
                 }

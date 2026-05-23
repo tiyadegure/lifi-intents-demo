@@ -186,6 +186,8 @@ def _collect_solver_stats() -> dict:
     for r in sample_routes:
         from_id = str(r.get("fromChainId", ""))
         to_id = str(r.get("toChainId", ""))
+        from_name = r.get("fromChain", from_id) if isinstance(r.get("fromChain"), str) else r.get("fromChain", {}).get("name", from_id)
+        to_name = r.get("toChain", to_id) if isinstance(r.get("toChain"), str) else r.get("toChain", {}).get("name", to_id)
         try:
             t0 = time.time()
             health = agent.check_route_health(from_id, to_id)
@@ -195,8 +197,6 @@ def _collect_solver_stats() -> dict:
             is_healthy = health.get("data", {}).get("healthy", True)
             if is_healthy:
                 total_routes += 1
-            from_name = r.get("fromChain", {}).get("name", from_id)
-            to_name = r.get("toChain", {}).get("name", to_id)
             chain_counts[from_name] = chain_counts.get(from_name, 0) + 1
             chain_counts[to_name] = chain_counts.get(to_name, 0) + 1
         except Exception:

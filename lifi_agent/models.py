@@ -106,12 +106,34 @@ def raw_to_amount(raw_amount: str, token: str) -> float:
         return 0.0
 
 
+def parse_amount_with_symbol(amount_str: str) -> float:
+    """Parse amount strings like '0.978879 USDC' or '1 USDC' -> float.
+
+    New MCP API returns amounts as '0.978879 USDC' instead of raw units.
+    """
+    try:
+        cleaned = amount_str.strip()
+        for symbol in ['USDC', 'USDT', 'ETH', 'WETH', 'DAI']:
+            cleaned = cleaned.replace(f' {symbol}', '').replace(symbol, '')
+        cleaned = cleaned.strip()
+        return float(cleaned)
+    except (ValueError, AttributeError):
+        return 0.0
+
+
 def normalize_output_amount(output_amount: str, input_amount: str, token: str) -> float:
     """Convert output amount to human-readable, handling both raw and human formats.
 
-    If output looks like raw units (>1000x input), converts via raw_to_amount.
+    Handles:
+    - New format: '0.978879 USDC' (human-readable with symbol)
+    - Old format: '9980000' (raw units)
+    - Plain number: '9.98'
     """
     try:
+        # New format: "0.978879 USDC" — strip symbol and return
+        if isinstance(output_amount, str) and any(s in output_amount.upper() for s in ['USDC', 'USDT', 'ETH', 'WETH', 'DAI']):
+            return parse_amount_with_symbol(output_amount)
+
         out_str = ''.join(c for c in output_amount if c.isdigit() or c == '.')
         out_raw = float(out_str)
         inp = float(input_amount)
@@ -138,6 +160,14 @@ class Intent:
     def to_chain_id(self) -> str:
         return CHAINS[self.to_chain]["id"]
 
+    def from_chain_name(self) -> str:
+        """Chain name for new MCP API (e.g. 'base', 'ethereum')."""
+        return self.from_chain
+
+    def to_chain_name(self) -> str:
+        """Chain name for new MCP API (e.g. 'arbitrum', 'base')."""
+        return self.to_chain
+
     def from_token_address(self) -> str:
         chain_id = self.from_chain_id()
         return TOKENS.get(self.token, {}).get(chain_id, "")
@@ -145,6 +175,10 @@ class Intent:
     def to_token_address(self) -> str:
         chain_id = self.to_chain_id()
         return TOKENS.get(self.token, {}).get(chain_id, "")
+
+    def token_symbol(self) -> str:
+        """Token symbol for new MCP API (e.g. 'USDC', 'ETH')."""
+        return self.token.upper()
 
     def __repr__(self):
         return f"Intent({self.amount} {self.token.upper()} {self.from_chain}→{self.to_chain})"

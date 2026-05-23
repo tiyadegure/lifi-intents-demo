@@ -197,26 +197,39 @@ class MCPClient:
         args = args or {}
 
         if tool == "get-supported-routes":
-            return {"data": {"routes": [
-                {"fromChainId": 8453, "toChainId": 42161,
-                 "fromToken": {"address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}},
-                {"fromChainId": 1, "toChainId": 10,
-                 "fromToken": {"address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"}},
-                {"fromChainId": 42161, "toChainId": 8453,
-                 "fromToken": {"address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"}},
-            ]}}
+            return [
+                {"fromChainId": 8453, "toChainId": 42161, "fromChain": "Base", "toChain": "Arbitrum",
+                 "fromToken": {"symbol": "USDC", "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"},
+                 "toToken": {"symbol": "USDC", "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"},
+                 "isActive": True},
+                {"fromChainId": 1, "toChainId": 8453, "fromChain": "Ethereum", "toChain": "Base",
+                 "fromToken": {"symbol": "USDC", "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"},
+                 "toToken": {"symbol": "USDC", "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"},
+                 "isActive": True},
+                {"fromChainId": 1, "toChainId": 42161, "fromChain": "Ethereum", "toChain": "Arbitrum",
+                 "fromToken": {"symbol": "USDC", "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"},
+                 "toToken": {"symbol": "USDC", "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"},
+                 "isActive": True},
+            ]
 
         if tool == "check-route-health":
             return {"data": {"healthy": True, "status": "healthy", "latencyMs": 120, "activeSolvers": 3}}
 
         if tool == "request-quote":
-            # Simulate ~0.2% fee
-            from_amount = args.get("amount", "10000000")
+            # Simulate ~0.2% fee with new human-readable format
+            amount_str = args.get("amount", "10")
             try:
-                out = int(int(from_amount) * 0.998)
+                amount_float = float(amount_str)
+                out = amount_float * 0.998
+                out_str = f"{out:.6f}"
             except (ValueError, TypeError):
-                out = 9980000
-            return {"data": {"quotes": [{"inputAmount": str(from_amount), "outputAmount": str(out), "quoteId": "demo-quote-001"}]}}
+                out_str = "9.980000"
+            from_token = args.get("fromToken", "USDC")
+            to_token = args.get("toToken", "USDC")
+            return {"data": {"quotes": [
+                {"inputAmount": f"{amount_str} {from_token}", "outputAmount": f"{out_str} {to_token}",
+                 "quoteId": "demo-quote-001", "validUntil": 9999999999, "partialFill": False}
+            ], "cacheKey": "demo-cache-key"}}
 
         if tool == "get-solver-identities":
             return {"data": {"solverIdentities": [
@@ -225,7 +238,7 @@ class MCPClient:
             ]}}
 
         if tool == "get-quote-inventory":
-            return {"data": {"quotes": [{"solver": "demo-solver", "inputAmount": "10000000", "outputAmount": "9980000"}]}}
+            return {"data": {"quotes": [{"solver": "demo-solver", "inputAmount": "10 USDC", "outputAmount": "9.98 USDC"}]}}
 
         if tool == "prepare-order":
             return {"data": {"orderId": "demo-order-001", "status": "pending"}}

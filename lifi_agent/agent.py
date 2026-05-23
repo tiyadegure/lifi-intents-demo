@@ -126,29 +126,31 @@ class LifAgent:
         return f"Connected to {server.get('name', '?')} v{server.get('version', '?')}"
 
     def get_routes(self) -> dict:
-        """Get all supported routes."""
-        return self.mcp.call("get-supported-routes", {})
+        """Get all supported routes. Normalizes real MCP (flat list) and demo (wrapped dict) formats."""
+        result = self.mcp.call("get-supported-routes", {})
+        # Real MCP returns a flat list; normalize to consistent dict format
+        if isinstance(result, list):
+            return {"data": {"routes": result}}
+        return result
 
     def get_quote(self, intent: Intent) -> dict:
         """Get a cross-chain quote with route validation."""
         routes_result = self.get_routes()
         route_list = routes_result.get("data", {}).get("routes", [])
-        from_id = int(intent.from_chain_id())
-        to_id = int(intent.to_chain_id())
 
         if route_list:
             matching = [r for r in route_list
-                        if r.get("fromChainId") == from_id and r.get("toChainId") == to_id
-                        and r.get("fromToken", {}).get("address", "").lower() == intent.from_token_address().lower()]
+                        if str(r.get("fromChainId", r.get("fromChain", ""))) in (intent.from_chain_id(), intent.from_chain_name())
+                        and str(r.get("toChainId", r.get("toChain", ""))) in (intent.to_chain_id(), intent.to_chain_name())]
             if not matching:
                 return {"error": f"No route found for {intent.from_chain} → {intent.to_chain} ({intent.token.upper()})"}
 
         args = {
-            "fromChain": intent.from_chain_id(),
-            "toChain": intent.to_chain_id(),
-            "fromToken": intent.from_token_address(),
-            "toToken": intent.to_token_address(),
-            "amount": amount_to_raw(intent.amount, intent.token),
+            "fromChain": intent.from_chain_name(),
+            "toChain": intent.to_chain_name(),
+            "fromToken": intent.token_symbol(),
+            "toToken": intent.token_symbol(),
+            "amount": intent.amount,
             "userAddress": intent.address,
         }
         result = self.mcp.call("request-quote", args)
@@ -245,13 +247,11 @@ class LifAgent:
         try:
             routes_result = self.get_routes()
             route_list = routes_result.get("data", {}).get("routes", [])
-            from_id = int(intent.from_chain_id())
-            to_id = int(intent.to_chain_id())
             
             if route_list:
                 matching = [r for r in route_list
-                            if r.get("fromChainId") == from_id and r.get("toChainId") == to_id
-                            and r.get("fromToken", {}).get("address", "").lower() == intent.from_token_address().lower()]
+                            if str(r.get("fromChainId", r.get("fromChain", ""))) in (intent.from_chain_id(), intent.from_chain_name())
+                            and str(r.get("toChainId", r.get("toChain", ""))) in (intent.to_chain_id(), intent.to_chain_name())]
                 route_supported = len(matching) > 0
             else:
                 route_supported = True
@@ -352,11 +352,11 @@ class LifAgent:
         step_start = time.time()
         try:
             quote_args = {
-                "fromChain": intent.from_chain_id(),
-                "toChain": intent.to_chain_id(),
-                "fromToken": intent.from_token_address(),
-                "toToken": intent.to_token_address(),
-                "amount": amount_to_raw(intent.amount, intent.token),
+                "fromChain": intent.from_chain_name(),
+                "toChain": intent.to_chain_name(),
+                "fromToken": intent.token_symbol(),
+                "toToken": intent.token_symbol(),
+                "amount": intent.amount,
                 "userAddress": intent.address,
             }
             result = self.mcp.call("request-quote", quote_args)
@@ -556,6 +556,8 @@ class LifAgent:
 
     def compare_quotes(self, intent: Intent, chains: list[str] = None) -> list[dict]:
         """Compare quotes across multiple destination chains."""
+        from .models import parse_amount_with_symbol
+
         if chains is None:
             chains = ["arbitrum", "optimism", "base", "polygon", "ethereum"]
 
@@ -580,10 +582,10 @@ class LifAgent:
                 logging.debug(f"Quote failed for {chain}: {e}")
                 continue
 
-        # Sort by output amount (higher is better)
+        # Sort by output amount (higher is better) — handle "0.978879 USDC" format
         def parse_output(r):
             try:
-                return float(''.join(c for c in r.get("output", "0") if c.isdigit() or c == '.'))
+                return parse_amount_with_symbol(r.get("output", "0"))
             except ValueError:
                 return 0
 
@@ -719,9 +721,10 @@ class LifAgent:
             # Find matching routes
             matching_routes = []
             for r in route_list:
-                r_from = r.get("fromChain", "").lower()
-                r_to = r.get("toChain", "").lower()
-                if r_from == from_chain.lower() and r_to == to_chain.lower():
+                r_from = str(r.get("fromChainId", r.get("fromChain", ""))).lower()
+                r_to = str(r.get("toChainId", r.get("toChain", ""))).lower()
+                if (r_from in (from_chain.lower(), CHAINS.get(from_chain.lower(), {}).get("id", ""))
+                    and r_to in (to_chain.lower(), CHAINS.get(to_chain.lower(), {}).get("id", ""))):
                     matching_routes.append(r)
             
             quote_available = len(matching_routes) > 0

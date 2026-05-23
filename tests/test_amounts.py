@@ -2,6 +2,7 @@
 
 import pytest
 from lifi_agent.agent import amount_to_raw, raw_to_amount, normalize_output_amount
+from lifi_agent.models import parse_amount_with_symbol
 
 
 class TestAmountToRaw:
@@ -84,3 +85,44 @@ class TestNormalizeOutputAmount:
     def test_zero(self):
         result = normalize_output_amount("0", "10", "usdc")
         assert result == 0.0
+
+
+class TestParseAmountWithSymbol:
+    """parse_amount_with_symbol handles new MCP format like '0.978879 USDC'."""
+
+    def test_usdc(self):
+        assert abs(parse_amount_with_symbol("0.978879 USDC") - 0.978879) < 0.000001
+
+    def test_usdc_whole(self):
+        assert parse_amount_with_symbol("10 USDC") == 10.0
+
+    def test_eth(self):
+        assert abs(parse_amount_with_symbol("0.5 ETH") - 0.5) < 0.001
+
+    def test_usdt(self):
+        assert parse_amount_with_symbol("100 USDT") == 100.0
+
+    def test_no_symbol(self):
+        assert parse_amount_with_symbol("9.98") == 9.98
+
+    def test_invalid(self):
+        assert parse_amount_with_symbol("abc") == 0.0
+
+    def test_empty(self):
+        assert parse_amount_with_symbol("") == 0.0
+
+
+class TestNormalizeOutputNewFormat:
+    """normalize_output_amount handles new '0.978879 USDC' format."""
+
+    def test_new_format_usdc(self):
+        result = normalize_output_amount("9.980000 USDC", "10", "usdc")
+        assert abs(result - 9.98) < 0.001
+
+    def test_new_format_eth(self):
+        result = normalize_output_amount("0.998000 ETH", "1", "eth")
+        assert abs(result - 0.998) < 0.001
+
+    def test_new_format_small(self):
+        result = normalize_output_amount("0.978879 USDC", "1", "usdc")
+        assert abs(result - 0.978879) < 0.000001
