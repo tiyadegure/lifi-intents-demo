@@ -88,6 +88,19 @@ async def get_routes():
     return result
 
 
+@app.get("/api/status")
+async def get_status():
+    """Return current operating mode and connection status."""
+    await asyncio.to_thread(ensure_connected)
+    return {
+        "mode": agent.mcp.mode,
+        "endpoint": agent.mcp.url,
+        "connected": agent.mcp._connected,
+        "mock_source": agent.mcp.mock_mode_source() or None,
+        "strict_mode": agent.mcp.is_strict_mode(),
+    }
+
+
 @app.get("/api/quote")
 async def get_quote(from_chain: str, to_chain: str, token: str, amount: str):
     # Input validation

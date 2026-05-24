@@ -41,7 +41,9 @@ class MCPClient:
         self._async_client: Optional[httpx.AsyncClient] = None
         self._cache: dict[str, tuple[float, Any]] = {}
         self._connected = False
-        self._mock_mode = False
+        # Check mock-forced ONCE at init — never call _is_mock_forced() again
+        self._mock_mode = _is_mock_forced()
+        self._mock_fallback = False  # True when auto-fallback triggered
         # Rate limiting — separate timestamps for sync/async to avoid cross-contamination
         self._last_call_time_sync = 0.0
         self._last_call_time_async = 0.0
@@ -134,7 +136,7 @@ class MCPClient:
 
     def _init_session_sync(self) -> str:
         """Initialize a new MCP session (sync). Returns session ID."""
-        if _is_mock_forced() or self._mock_mode:
+        if self._mock_mode:
             self._connected = True
             return "demo-session"
         try:
@@ -159,12 +161,13 @@ class MCPClient:
                 raise
             logger.warning("Local MCP not available at %s, falling back to mock mode", self.url)
             self._mock_mode = True
+            self._mock_fallback = True
             self._connected = True
             return "demo-session"
 
     async def _init_session_async(self) -> str:
         """Initialize a new MCP session (async). Returns session ID."""
-        if _is_mock_forced() or self._mock_mode:
+        if self._mock_mode:
             self._connected = True
             return "demo-session"
         try:
@@ -190,15 +193,15 @@ class MCPClient:
                 raise
             logger.warning("Local MCP not available at %s, falling back to mock mode", self.url)
             self._mock_mode = True
+            self._mock_fallback = True
             self._connected = True
             return "demo-session"
 
     def connect(self) -> dict:
         """Initialize MCP session (sync). Returns server info."""
-        if self.is_strict_mode() and _is_mock_forced():
+        if self.is_strict_mode() and self._mock_mode:
             raise RuntimeError("LIFI_AGENT_STRICT_MODE=1 conflicts with LIFI_AGENT_MOCK_MODE=1")
-        if _is_mock_forced():
-            self._mock_mode = True
+        if self._mock_mode:
             self._connected = True
             return {'serverInfo': {'name': 'lifi-intents-demo', 'version': '1.0.0'}}
         try:
@@ -222,15 +225,15 @@ class MCPClient:
                 raise
             logger.warning("Local MCP not available at %s, falling back to mock mode", self.url)
             self._mock_mode = True
+            self._mock_fallback = True
             self._connected = True
             return {'serverInfo': {'name': 'lifi-intents-demo', 'version': '1.0.0'}}
 
     async def connect_async(self) -> dict:
         """Initialize MCP session (async). Returns server info."""
-        if self.is_strict_mode() and _is_mock_forced():
+        if self.is_strict_mode() and self._mock_mode:
             raise RuntimeError("LIFI_AGENT_STRICT_MODE=1 conflicts with LIFI_AGENT_MOCK_MODE=1")
-        if _is_mock_forced():
-            self._mock_mode = True
+        if self._mock_mode:
             self._connected = True
             return {'serverInfo': {'name': 'lifi-intents-demo', 'version': '1.0.0'}}
         try:
@@ -255,6 +258,7 @@ class MCPClient:
                 raise
             logger.warning("Local MCP not available at %s, falling back to mock mode", self.url)
             self._mock_mode = True
+            self._mock_fallback = True
             self._connected = True
             return {'serverInfo': {'name': 'lifi-intents-demo', 'version': '1.0.0'}}
 
@@ -323,8 +327,8 @@ class MCPClient:
         # Strict mode: never allow mock fallback
         if self.is_strict_mode() and self._mock_mode:
             raise RuntimeError("LIFI_AGENT_STRICT_MODE=1: refusing to use mock mode in call()")
-        # Demo/mock mode: return mock data without hitting real MCP
-        if _is_mock_forced() or self._mock_mode:
+        # Mock mode: return mock data without hitting real MCP
+        if self._mock_mode:
             return self._demo_call(tool, args)
 
         self._cleanup_cache()
@@ -387,8 +391,8 @@ class MCPClient:
         # Strict mode: never allow mock fallback
         if self.is_strict_mode() and self._mock_mode:
             raise RuntimeError("LIFI_AGENT_STRICT_MODE=1: refusing to use mock mode in call_async()")
-        # Demo/mock mode: return mock data without hitting real MCP
-        if _is_mock_forced() or self._mock_mode:
+        # Mock mode: return mock data without hitting real MCP
+        if self._mock_mode:
             return self._demo_call(tool, args)
 
         self._cleanup_cache()
@@ -452,24 +456,42 @@ class MCPClient:
 
     def is_mock_mode(self) -> bool:
         """Check if client is running in mock/fallback mode."""
-        return self._mock_mode or _is_mock_forced()
+        return self._mock_mode
 
     @staticmethod
     def is_strict_mode() -> bool:
         """Check if strict mode is enabled (never fall back to mock)."""
         return os.environ.get("LIFI_AGENT_STRICT_MODE") == "1"
 
+    @property
+    def mode(self) -> str:
+        """Return the current operating mode as a clear string.
+        
+        Modes:
+        - "mock_forced": LIFI_AGENT_MOCK_MODE=1 (or deprecated LIFI_AGENT_DEMO_MODE=1)
+        - "strict": LIFI_AGENT_STRICT_MODE=1 (real MCP only, no fallback)
+        - "mock_fallback": local MCP was unreachable, auto-fell back to mock
+        - "local_mcp": connected to real local MCP server
+        """
+        if self._mock_mode and self._mock_fallback:
+            return "mock_fallback"
+        if self._mock_mode:
+            return "mock_forced"
+        if self.is_strict_mode():
+            return "strict"
+        return "local_mcp"
+
     def mock_mode_source(self) -> str:
         """Return why mock mode is active, or empty string if not in mock mode."""
-        if not self.is_mock_mode():
+        if not self._mock_mode:
             return ""
         if os.environ.get("LIFI_AGENT_DEMO_MODE") == "1":
             return "LIFI_AGENT_DEMO_MODE=1 (deprecated)"
         if os.environ.get("LIFI_AGENT_MOCK_MODE") == "1":
             return "LIFI_AGENT_MOCK_MODE=1"
-        if self.is_strict_mode():
-            return "LIFI_AGENT_STRICT_MODE=1 violation"
-        return "auto-fallback"
+        if self._mock_fallback:
+            return "auto-fallback (local MCP unreachable)"
+        return "unknown"
 
     def close(self):
         """Close sync client."""
