@@ -100,7 +100,7 @@ class TestMockMode:
         monkeypatch.setenv("LIFI_AGENT_MOCK_MODE", "1")
         client = MCPClient()
         result = client.call("check-route-health", {})
-        assert result["data"]["healthy"] is True
+        assert result["data"]["routeSupported"] is True
 
     def test_mock_connect(self, monkeypatch):
         monkeypatch.setenv("LIFI_AGENT_MOCK_MODE", "1")

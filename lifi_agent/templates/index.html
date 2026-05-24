@@ -4,192 +4,198 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LI.FI Intents Developer Playground</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
   *{margin:0;padding:0;box-sizing:border-box}
   :root{
-    --bg:#060a13;--surface:#0c1220;--card:#111a2e;--card-hover:#162040;
-    --border:#1e2d4a;--border-subtle:#162040;
-    --text:#e8edf5;--text2:#8494b2;--text3:#4a5a7a;
-    --accent:#6c5ce7;--accent2:#4f8cff;--glow:#6c5ce733;
-    --green:#00d68f;--green-bg:#00d68f15;--green-border:#00d68f33;
-    --red:#ff6b6b;--red-bg:#ff6b6b15;--red-border:#ff6b6b33;
-    --amber:#ffa94d;--amber-bg:#ffa94d15;--amber-border:#ffa94d33;
-    --r:12px;--r-sm:8px;
+    --bg:#f5f5f5;--surface:#fff;--card:#f9fafb;--card-hover:#f3f4f6;
+    --border:#e5e7eb;--border-subtle:#f0f0f0;
+    --text:#111827;--text2:#6b7280;--text3:#9ca3af;
+    --accent:#4c64ff;--accent-hover:#3b50e0;--accent-bg:rgba(76,100,255,.06);--accent-border:rgba(76,100,255,.15);
+    --green:#10b981;--green-bg:rgba(16,185,129,.06);--green-border:rgba(16,185,129,.2);
+    --red:#ef4444;--red-bg:rgba(239,68,68,.06);--red-border:rgba(239,68,68,.2);
+    --amber:#f59e0b;--amber-bg:rgba(245,158,11,.06);--amber-border:rgba(245,158,11,.2);
+    --r:12px;--r-sm:8px;--shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+    --shadow-lg:0 4px 12px rgba(0,0,0,.08);
     --mono:'JetBrains Mono','SF Mono',Consolas,monospace;
   }
   body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
-  .container{max-width:1200px;margin:0 auto;padding:24px 20px}
+  .container{max-width:1100px;margin:0 auto;padding:24px 20px}
 
   /* Header */
-  header{text-align:center;padding:32px 0 24px;position:relative}
-  header::after{content:'';position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:160px;height:1px;background:linear-gradient(90deg,transparent,var(--accent),transparent)}
-  h1{font-size:28px;font-weight:700;background:linear-gradient(135deg,#a78bfa,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:-0.5px}
-  header p{color:var(--text2);margin-top:8px;font-size:14px}
-  .badge-row{display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap}
-  .badge{font-size:10px;padding:3px 10px;border-radius:20px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;background:var(--glow);color:var(--accent);border:1px solid #6c5ce744}
+  header{text-align:center;padding:28px 0 20px}
+  .logo-row{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:6px}
+  .logo-icon{font-size:28px}
+  h1{font-size:22px;font-weight:700;letter-spacing:-0.5px}
+  header p{color:var(--text2);margin-top:4px;font-size:13px;font-weight:400}
+  .badge-row{display:flex;gap:6px;justify-content:center;margin-top:12px;flex-wrap:wrap}
+  .badge{font-size:10px;padding:3px 10px;border-radius:20px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent-border)}
+
+  /* Mode Status Bar */
+  .mode-bar{display:flex;align-items:center;gap:10px;padding:10px 14px;margin:0 0 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);font-size:13px;box-shadow:var(--shadow)}
+  .mode-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .mode-dot.green{background:var(--green)}.mode-dot.amber{background:var(--amber)}.mode-dot.red{background:var(--red)}
+  .mode-label{font-weight:600;color:var(--text)}
+  .mode-endpoint{color:var(--text3);font-family:var(--mono);font-size:12px;margin-left:auto}
+
+  /* Action buttons */
+  .action-row{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px}
+  .action-btn{background:var(--surface);border:1px solid var(--border);color:var(--text2);padding:8px 14px;border-radius:var(--r-sm);font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s;font-weight:500;box-shadow:var(--shadow)}
+  .action-btn:hover{border-color:var(--accent);color:var(--accent);box-shadow:var(--shadow-lg)}
+  .action-btn:disabled{opacity:.45;cursor:not-allowed}
 
   /* Input Section */
-  .input-section{margin:28px 0 24px}
-  .input-row{display:flex;gap:10px;align-items:stretch}
-  .input-row input{flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:14px 18px;border-radius:var(--r-sm);font-size:14px;font-family:inherit;outline:none;transition:border-color .2s,box-shadow .2s}
-  .input-row input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--glow)}
+  .input-section{margin:20px 0 20px}
+  .input-row{display:flex;gap:8px;align-items:stretch}
+  .input-row input{flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:14px 16px;border-radius:var(--r-sm);font-size:14px;font-family:inherit;outline:none;transition:border-color .2s,box-shadow .2s;box-shadow:var(--shadow)}
+  .input-row input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
   .input-row input::placeholder{color:var(--text3)}
-  .btn{background:linear-gradient(135deg,var(--accent),#5a4bd1);color:#fff;border:none;padding:14px 28px;border-radius:var(--r-sm);cursor:pointer;font-size:14px;font-weight:600;font-family:inherit;transition:transform .1s,box-shadow .2s,opacity .2s;white-space:nowrap}
-  .btn:hover{box-shadow:0 4px 20px var(--glow);transform:translateY(-1px)}
+  .btn{background:var(--accent);color:#fff;border:none;padding:14px 24px;border-radius:var(--r-sm);cursor:pointer;font-size:14px;font-weight:600;font-family:inherit;transition:all .15s;white-space:nowrap;box-shadow:var(--shadow)}
+  .btn:hover{background:var(--accent-hover);box-shadow:var(--shadow-lg);transform:translateY(-1px)}
   .btn:active{transform:translateY(0)}
   .btn:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none}
+
+  /* Presets */
   .preset-section{margin-top:12px}
   .preset-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px}
-  .presets{display:flex;gap:8px;flex-wrap:wrap}
-  .preset-btn{background:var(--surface);border:1px solid var(--border-subtle);color:var(--text2);padding:6px 14px;border-radius:16px;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s;font-weight:500}
+  .presets{display:flex;gap:6px;flex-wrap:wrap}
+  .preset-btn{background:var(--surface);border:1px solid var(--border);color:var(--text2);padding:6px 12px;border-radius:16px;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s;font-weight:500}
   .preset-btn.safe:hover{border-color:var(--green-border);color:var(--green);background:var(--green-bg)}
   .preset-btn.refuse:hover{border-color:var(--red-border);color:var(--red);background:var(--red-bg)}
   .preset-btn.safe.active{border-color:var(--green-border);color:var(--green);background:var(--green-bg)}
   .preset-btn.refuse.active{border-color:var(--red-border);color:var(--red);background:var(--red-bg)}
-  .mode-bar{display:flex;align-items:center;gap:10px;padding:10px 16px;margin:0 0 16px;background:var(--surface);border:1px solid var(--border-subtle);border-radius:var(--r-sm);font-size:13px}
-  .mode-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-  .mode-dot.green{background:var(--green)}
-  .mode-dot.amber{background:var(--amber)}
-  .mode-dot.red{background:var(--red)}
-  .mode-label{font-weight:600;color:var(--text)}
-  .mode-endpoint{color:var(--text3);font-family:monospace;font-size:12px;margin-left:auto}
-  .copy-btn{background:var(--surface);border:1px solid var(--border-subtle);color:var(--text2);padding:6px 14px;border-radius:var(--r-sm);font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s;margin-top:12px}
-  .copy-btn:hover{border-color:var(--green-border);color:var(--green)}
 
-  /* Action buttons row */
-  .action-row{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px}
-  .action-btn{background:var(--surface);border:1px solid var(--border-subtle);color:var(--text2);padding:8px 16px;border-radius:var(--r-sm);font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s;font-weight:500}
-  .action-btn:hover{border-color:var(--accent);color:var(--accent)}
-  .action-btn:disabled{opacity:.45;cursor:not-allowed}
-
-  /* Judge / Report results */
-  .report-section{margin:20px 0;padding:20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);animation:fadeSlideIn .3s ease}
-  .report-title{font-size:14px;font-weight:600;color:var(--text);margin-bottom:16px}
-  .report-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border-subtle)}
+  /* Report */
+  .report-section{margin:16px 0;padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);animation:fadeSlideIn .3s ease;box-shadow:var(--shadow)}
+  .report-title{font-size:14px;font-weight:600;color:var(--text);margin-bottom:14px}
+  .report-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-subtle)}
   .report-row:last-child{border-bottom:none}
-  .report-step-num{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;background:var(--card);color:var(--text2);flex-shrink:0}
-  .report-name{font-size:13px;font-weight:600;color:var(--text);min-width:120px}
-  .report-verdict{font-size:12px;font-weight:600;padding:2px 10px;border-radius:10px}
+  .report-step-num{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;background:var(--card);color:var(--text2);flex-shrink:0}
+  .report-name{font-size:13px;font-weight:600;color:var(--text);min-width:100px}
+  .report-verdict{font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px}
   .report-verdict.match{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
   .report-verdict.mismatch{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
   .report-reason{font-size:12px;color:var(--text2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .report-summary{margin-top:16px;padding-top:12px;border-top:1px solid var(--border);font-size:14px;font-weight:600;color:var(--text)}
+  .report-summary{margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:14px;font-weight:600;color:var(--text)}
+
+  /* Three Columns */
+  .columns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:20px}
+  .col{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;min-height:280px;transition:border-color .2s;box-shadow:var(--shadow)}
+  .col:hover{border-color:#d1d5db}
+  .col-header{display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border-subtle)}
+  .col-icon{font-size:18px}
+  .col-title{font-size:14px;font-weight:600;color:var(--text);letter-spacing:-0.2px}
+  .col-subtitle{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.6px;font-weight:600}
+
+  /* Column 1: Intent */
+  .intent-json{background:var(--card);border:1px solid var(--border-subtle);border-radius:var(--r-sm);padding:14px;font-family:var(--mono);font-size:12px;line-height:1.7;color:var(--text2);overflow-x:auto;white-space:pre-wrap;word-break:break-all}
+  .json-key{color:var(--accent)}
+  .json-str{color:var(--green)}
+  .json-num{color:var(--amber)}
+
+  /* Column 2: Structured Output */
+  .param-group{margin-bottom:14px}
+  .param-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:6px}
+  .param-block{background:var(--card);border:1px solid var(--border-subtle);border-radius:var(--r-sm);padding:12px;font-family:var(--mono);font-size:12px;line-height:1.6;color:var(--text2)}
+  .param-block .key{color:var(--accent)}
+  .param-block .val{color:var(--green)}
+  .param-block .num{color:var(--amber)}
+
+  /* Column 3: Decision Trace */
+  .trace-steps{display:flex;flex-direction:column;gap:0}
+  .trace-step{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border-subtle);animation:fadeSlideIn .3s ease both;cursor:pointer}
+  .trace-step:last-child{border-bottom:none}
+  .trace-step:hover{background:rgba(0,0,0,.01)}
+  .trace-icon{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;margin-top:1px}
+  .trace-icon.pass{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+  .trace-icon.fail{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+  .trace-icon.skip{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-border)}
+  .trace-body{flex:1;min-width:0}
+  .trace-name{font-size:13px;font-weight:600;color:var(--text);margin-bottom:1px}
+  .trace-detail{font-size:12px;color:var(--text2);line-height:1.4}
+  .trace-time{font-size:11px;color:var(--text3);font-variant-numeric:tabular-nums;white-space:nowrap;margin-top:1px}
+  .trace-tool{font-size:10px;color:var(--accent);font-weight:500;background:var(--accent-bg);padding:1px 6px;border-radius:8px;margin-left:6px;border:1px solid var(--accent-border)}
 
   /* Collapsible trace step */
-  .trace-step{cursor:pointer}
-  .trace-step:hover{background:rgba(255,255,255,.02)}
-  .trace-expand{display:none;padding:8px 0 4px 36px;animation:fadeSlideIn .2s ease}
+  .trace-expand{display:none;padding:6px 0 2px 32px;animation:fadeSlideIn .2s ease}
   .trace-expand.open{display:block}
   .trace-expand-row{margin-bottom:6px}
   .trace-expand-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-weight:600;margin-bottom:2px}
   .trace-expand-value{font-size:12px;color:var(--text2);font-family:var(--mono);line-height:1.5}
   .trace-expand-value.mono{background:var(--card);padding:6px 10px;border-radius:6px;border:1px solid var(--border-subtle);white-space:pre-wrap;word-break:break-all}
 
-  /* MCP Proof */
-  .proof-section{margin:20px 0}
-  .proof-toggle{background:var(--surface);border:1px solid var(--border);color:var(--text2);padding:10px 16px;border-radius:var(--r-sm);font-size:13px;cursor:pointer;font-family:inherit;transition:all .15s;font-weight:500;width:100%;text-align:left;display:flex;align-items:center;gap:8px}
-  .proof-toggle:hover{border-color:var(--accent)}
-  .proof-toggle .arrow{transition:transform .2s;margin-left:auto}
-  .proof-toggle .arrow.open{transform:rotate(90deg)}
-  .proof-body{display:none;padding:16px;background:var(--surface);border:1px solid var(--border);border-top:none;border-radius:0 0 var(--r-sm) var(--r-sm);animation:fadeSlideIn .2s ease}
-  .proof-body.open{display:block}
-  .proof-row{display:flex;align-items:center;gap:10px;padding:6px 0;font-size:13px}
-  .proof-label{color:var(--text3);min-width:100px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
-  .proof-value{color:var(--text);font-family:var(--mono);font-size:12px}
-
-  /* Three Column Layout */
-  .columns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:24px}
-  .col{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px;min-height:300px;transition:border-color .2s}
-  .col:hover{border-color:#2a3f6a}
-  .col-header{display:flex;align-items:center;gap:10px;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--border-subtle)}
-  .col-icon{font-size:20px}
-  .col-title{font-size:14px;font-weight:600;color:var(--text);letter-spacing:-0.2px}
-  .col-subtitle{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;font-weight:600}
-
-  /* Column 1: Intent */
-  .intent-json{background:var(--card);border:1px solid var(--border-subtle);border-radius:var(--r-sm);padding:16px;font-family:var(--mono);font-size:12px;line-height:1.7;color:var(--text2);overflow-x:auto;white-space:pre-wrap;word-break:break-all}
-  .json-key{color:var(--accent2)}
-  .json-str{color:var(--green)}
-  .json-num{color:var(--amber)}
-
-  /* Column 2: Structured Output */
-  .param-group{margin-bottom:16px}
-  .param-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px}
-  .param-block{background:var(--card);border:1px solid var(--border-subtle);border-radius:var(--r-sm);padding:14px;font-family:var(--mono);font-size:12px;line-height:1.6;color:var(--text2)}
-  .param-block .key{color:var(--accent2)}
-  .param-block .val{color:var(--green)}
-  .param-block .num{color:var(--amber)}
-
-  /* Column 3: Decision Trace */
-  .trace-steps{display:flex;flex-direction:column;gap:0}
-  .trace-step{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--border-subtle);animation:fadeSlideIn .3s ease both}
-  .trace-step:last-child{border-bottom:none}
-  .trace-icon{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;margin-top:1px}
-  .trace-icon.pass{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
-  .trace-icon.fail{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
-  .trace-icon.skip{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-border)}
-  .trace-body{flex:1;min-width:0}
-  .trace-name{font-size:13px;font-weight:600;color:var(--text);margin-bottom:2px}
-  .trace-detail{font-size:12px;color:var(--text2);line-height:1.4}
-  .trace-time{font-size:11px;color:var(--text3);font-variant-numeric:tabular-nums;white-space:nowrap;margin-top:1px}
-  .trace-tool{font-size:10px;color:var(--text3);font-weight:400;background:var(--surface);padding:1px 6px;border-radius:8px;margin-left:6px}
-
   /* Verdict Banner */
-  .verdict{margin-top:20px;padding:16px 20px;border-radius:var(--r-sm);display:flex;align-items:center;gap:14px;animation:fadeSlideIn .4s ease}
+  .verdict{margin-top:16px;padding:14px 18px;border-radius:var(--r-sm);display:flex;align-items:center;gap:12px;animation:fadeSlideIn .4s ease}
   .verdict.executable{background:var(--green-bg);border:1px solid var(--green-border)}
   .verdict.refused{background:var(--red-bg);border:1px solid var(--red-border)}
-  .verdict-icon{font-size:24px}
-  .verdict-label{font-size:20px;font-weight:700;letter-spacing:-0.3px}
+  .verdict-icon{font-size:22px}
+  .verdict-label{font-size:18px;font-weight:700;letter-spacing:-0.3px}
   .verdict.executable .verdict-label{color:var(--green)}
   .verdict.refused .verdict-label{color:var(--red)}
   .verdict-reason{font-size:13px;color:var(--text2);margin-top:2px}
 
+  /* Copy buttons */
+  .copy-btn{background:var(--surface);border:1px solid var(--border);color:var(--text2);padding:6px 12px;border-radius:var(--r-sm);font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s;margin-top:10px}
+  .copy-btn:hover{border-color:var(--accent);color:var(--accent)}
+
   /* Empty State */
-  .empty-state{color:var(--text3);font-size:13px;padding:40px 20px;text-align:center;line-height:1.6}
-  .empty-state .icon{font-size:32px;margin-bottom:12px;display:block}
+  .empty-state{color:var(--text3);font-size:13px;padding:32px 16px;text-align:center;line-height:1.6}
+  .empty-state .icon{font-size:28px;margin-bottom:10px;display:block}
 
   /* Skeleton */
   .skeleton{background:linear-gradient(90deg,var(--card) 25%,var(--card-hover) 50%,var(--card) 75%);background-size:200% 100%;animation:pulse 1.5s ease-in-out infinite;border-radius:6px;height:14px;margin:8px 0}
   .skeleton.w60{width:60%}.skeleton.w40{width:40%}.skeleton.w80{width:80%}.skeleton.w100{width:100%}
 
   /* How It Works */
-  .how-it-works{margin-top:32px;padding:28px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);text-align:center}
-  .how-it-works h3{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:var(--text3);margin-bottom:20px}
+  .how-it-works{margin-top:24px;padding:24px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);text-align:center;box-shadow:var(--shadow)}
+  .how-it-works h3{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:var(--text3);margin-bottom:16px}
   .flow{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap}
-  .flow-step{display:flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border-subtle);padding:8px 14px;border-radius:var(--r-sm);font-size:12px;color:var(--text2);font-weight:500;transition:border-color .2s}
-  .flow-step:hover{border-color:#2a3f6a}
-  .flow-step .step-icon{font-size:14px}
+  .flow-step{display:flex;align-items:center;gap:5px;background:var(--card);border:1px solid var(--border-subtle);padding:7px 12px;border-radius:var(--r-sm);font-size:12px;color:var(--text2);font-weight:500;transition:border-color .2s}
+  .flow-step:hover{border-color:#d1d5db}
+  .flow-step .step-icon{font-size:13px}
   .flow-step.highlight{border-color:var(--green-border);background:var(--green-bg);color:var(--green)}
-  .flow-arrow{color:var(--text3);font-size:14px}
+  .flow-arrow{color:var(--text3);font-size:13px}
 
   /* Duration badge */
   .duration-badge{display:inline-block;background:var(--card);border:1px solid var(--border-subtle);color:var(--text3);font-size:11px;padding:2px 8px;border-radius:10px;font-family:var(--mono);font-variant-numeric:tabular-nums;margin-left:8px}
 
+  /* MCP Proof */
+  .proof-section{margin:16px 0}
+  .proof-toggle{background:var(--surface);border:1px solid var(--border);color:var(--text2);padding:10px 14px;border-radius:var(--r-sm);font-size:13px;cursor:pointer;font-family:inherit;transition:all .15s;font-weight:500;width:100%;text-align:left;display:flex;align-items:center;gap:8px;box-shadow:var(--shadow)}
+  .proof-toggle:hover{border-color:var(--accent)}
+  .proof-toggle .arrow{transition:transform .2s;margin-left:auto}
+  .proof-toggle .arrow.open{transform:rotate(90deg)}
+  .proof-body{display:none;padding:14px;background:var(--surface);border:1px solid var(--border);border-top:none;border-radius:0 0 var(--r-sm) var(--r-sm);animation:fadeSlideIn .2s ease}
+  .proof-body.open{display:block}
+  .proof-row{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px}
+  .proof-label{color:var(--text3);min-width:90px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+  .proof-value{color:var(--text);font-family:var(--mono);font-size:12px}
+
   /* Footer */
-  footer{text-align:center;padding:24px 0 12px;color:var(--text3);font-size:12px;border-top:1px solid var(--border-subtle);margin-top:24px}
+  footer{text-align:center;padding:20px 0 10px;color:var(--text3);font-size:12px;border-top:1px solid var(--border-subtle);margin-top:20px}
   footer a{color:var(--accent);text-decoration:none}
-  footer a:hover{color:#a78bfa}
+  footer a:hover{text-decoration:underline}
 
   /* Loading spinner */
   .loading{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle}
   @keyframes spin{to{transform:rotate(360deg)}}
-  @keyframes fadeSlideIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes fadeSlideIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
   @keyframes pulse{0%,100%{opacity:.4}50%{opacity:.8}}
 
   /* Status message */
-  .status-msg{padding:10px 16px;border-radius:var(--r-sm);font-size:13px;font-weight:500;margin-bottom:12px;display:flex;align-items:center;gap:10px;animation:fadeSlideIn .3s ease}
+  .status-msg{padding:10px 14px;border-radius:var(--r-sm);font-size:13px;font-weight:500;margin-bottom:12px;display:flex;align-items:center;gap:8px;animation:fadeSlideIn .3s ease}
   .status-msg.err{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
 
   /* Responsive */
   @media(max-width:900px){
-    .columns{grid-template-columns:1fr;gap:16px}
+    .columns{grid-template-columns:1fr;gap:14px}
     .col{min-height:auto}
     .flow{gap:4px}
     .flow-step{padding:6px 10px;font-size:11px}
   }
   @media(max-width:480px){
-    h1{font-size:22px}
+    h1{font-size:18px}
     .input-row{flex-direction:column;gap:8px}
     .btn{padding:12px 20px}
     .container{padding:16px 14px}
@@ -199,8 +205,11 @@
 <body>
 <div class="container">
   <header>
-    <h1>LI.FI Intents Developer Playground</h1>
-    <p>Solver-aware technical demo — natural language → policy-driven cross-chain verdict</p>
+    <div class="logo-row">
+      <span class="logo-icon">🛡️</span>
+      <h1>LI.FI Intents Playground</h1>
+    </div>
+    <p>Natural language → policy-driven cross-chain verdict</p>
     <div class="badge-row">
       <span class="badge" id="modeBadge">MCP Protocol</span>
       <span class="badge">Safe Verdict</span>
@@ -231,9 +240,9 @@
       <button class="btn" id="analyzeBtn" onclick="analyzeIntent()">Analyze</button>
     </div>
     <div class="preset-section">
-      <div class="preset-label">Core Presets</div>
+      <div class="preset-label">Presets</div>
       <div class="presets" id="presetButtons">
-        <span style="color:var(--text3);font-size:12px">Loading presets...</span>
+        <span style="color:var(--text3);font-size:12px">Loading...</span>
       </div>
     </div>
   </div>
@@ -254,7 +263,7 @@
       <div id="intentContent">
         <div class="empty-state">
           <span class="icon">💬</span>
-          Type a cross-chain intent above<br>and click <strong>Analyze</strong> to see the<br>structured parsing result.
+          Type a cross-chain intent above<br>and click <strong>Analyze</strong>
         </div>
       </div>
     </div>
@@ -271,7 +280,7 @@
       <div id="outputContent">
         <div class="empty-state">
           <span class="icon">🔧</span>
-          The parsed intent will be<br>converted to structured MCP<br>tool call parameters here.
+          Parsed intent will be<br>converted to MCP parameters
         </div>
       </div>
     </div>
@@ -288,10 +297,10 @@
       <div id="traceContent">
         <div class="empty-state">
           <span class="icon">🛡️</span>
-          Each safety check step will<br>appear here with pass/fail<br>status and details.
+          Safety checks will appear<br>here with pass/fail status
         </div>
       </div>
-      <div id="copyBtns" style="display:none;margin-top:12px;gap:8px">
+      <div id="copyBtns" style="display:none;margin-top:10px;gap:8px">
         <button class="copy-btn" onclick="copyTrace()">Copy Trace JSON</button>
         <button class="copy-btn" onclick="copyMarkdown()">📋 Copy Markdown</button>
       </div>
@@ -341,7 +350,6 @@ function escapeHtml(s){var d=document.createElement('div');d.textContent=s;retur
 function setPreset(btn,value){
   document.getElementById('intentInput').value=value;
   document.getElementById('intentInput').focus();
-  // Highlight active preset
   document.querySelectorAll('.preset-btn').forEach(function(b){b.classList.remove('active')});
   btn.classList.add('active');
 }
@@ -368,7 +376,6 @@ async function loadPresets(){
     var container=document.getElementById('presetButtons');
     if(!presets.length){container.innerHTML='<span style="color:var(--text3);font-size:12px">No presets available</span>';return;}
 
-    // Group by category
     var groups={success:[],failure:[],other:[]};
     presets.forEach(function(p){
       var cat=p.category||'other';
@@ -394,7 +401,6 @@ async function loadPresets(){
   }
 }
 
-// Load presets on page load
 loadPresets();
 
 async function analyzeIntent(){
@@ -406,10 +412,8 @@ async function analyzeIntent(){
   btn.disabled=true;
   btn.innerHTML='<span class="loading"></span>';
 
-  // Clear status
   document.getElementById('statusArea').innerHTML='';
 
-  // Show loading skeletons in all columns
   document.getElementById('intentContent').innerHTML=
     '<div class="skeleton w80"></div><div class="skeleton w60"></div><div class="skeleton w40"></div>';
   document.getElementById('outputContent').innerHTML=
@@ -452,11 +456,11 @@ async function analyzeIntent(){
 
 function resetColumns(){
   document.getElementById('intentContent').innerHTML=
-    '<div class="empty-state"><span class="icon">💬</span>Type a cross-chain intent above<br>and click <strong>Analyze</strong> to see the<br>structured parsing result.</div>';
+    '<div class="empty-state"><span class="icon">💬</span>Type a cross-chain intent above<br>and click <strong>Analyze</strong></div>';
   document.getElementById('outputContent').innerHTML=
-    '<div class="empty-state"><span class="icon">🔧</span>The parsed intent will be<br>converted to structured MCP<br>tool call parameters here.</div>';
+    '<div class="empty-state"><span class="icon">🔧</span>Parsed intent will be<br>converted to MCP parameters</div>';
   document.getElementById('traceContent').innerHTML=
-    '<div class="empty-state"><span class="icon">🛡️</span>Each safety check step will<br>appear here with pass/fail<br>status and details.</div>';
+    '<div class="empty-state"><span class="icon">🛡️</span>Safety checks will appear<br>here with pass/fail status</div>';
 }
 
 function renderIntent(intent){
@@ -471,7 +475,6 @@ function renderIntent(intent){
 function renderOutput(params,policy){
   const nl=String.fromCharCode(10);
 
-  // Quote params
   let paramsHtml='';
   for(const[k,v]of Object.entries(params)){
     const cls=typeof v==='number'?'num':'str';
@@ -480,7 +483,6 @@ function renderOutput(params,policy){
   let out='<div class="param-group"><div class="param-label">Quote Parameters</div>';
   out+='<div class="param-block">{'+nl+paramsHtml+'}</div></div>';
 
-  // Policy
   let policyHtml='';
   for(const[k,v]of Object.entries(policy)){
     if(v===null||v===undefined)continue;
@@ -510,7 +512,6 @@ function renderTrace(steps,verdict,reason,durationMs){
     if(step.mcp_tool){html+=' <span class="trace-tool">'+escapeHtml(step.mcp_tool)+'</span>';}
     html+='</div>';
     html+='<div class="trace-detail">'+escapeHtml(step.detail)+'</div>';
-    // Expanded details
     html+='<div class="trace-expand" id="'+stepId+'">';
     if(step.purpose){
       html+='<div class="trace-expand-row"><div class="trace-expand-label">Purpose</div><div class="trace-expand-value">'+escapeHtml(step.purpose)+'</div></div>';
@@ -522,7 +523,7 @@ function renderTrace(steps,verdict,reason,durationMs){
       html+='<div class="trace-expand-row"><div class="trace-expand-label">Output</div><div class="trace-expand-value mono">'+escapeHtml(step.output_summary)+'</div></div>';
     }
     if(step.why){
-      html+='<div class="trace-expand-row"><div class="trace-expand-label">Why this matters</div><div class="trace-expand-value">'+escapeHtml(step.why)+'</div></div>';
+      html+='<div class="trace-expand-row"><div class="trace-expand-label">Why</div><div class="trace-expand-value">'+escapeHtml(step.why)+'</div></div>';
     }
     html+='</div>';
     html+='</div>';
@@ -532,7 +533,6 @@ function renderTrace(steps,verdict,reason,durationMs){
 
   html+='</div>';
 
-  // Verdict banner
   const isExec=verdict==='EXECUTABLE';
   html+='<div class="verdict '+(isExec?'executable':'refused')+'">';
   html+='<div class="verdict-icon">'+(isExec?'🛡️':'🚫')+'</div>';
@@ -552,31 +552,26 @@ function toggleStep(id){
   if(el){el.classList.toggle('open');}
 }
 
-// Enter key to analyze
 document.getElementById('intentInput').addEventListener('keydown',function(e){
   if(e.key==='Enter')analyzeIntent();
 });
 
-// Fetch mode on load
 fetch('/api/status').then(function(r){return r.json()}).then(function(d){
   var mode=d.mode||'unknown';
   var labels={local_mcp:'Local MCP',mock_forced:'Mock Mode',mock_fallback:'Mock Fallback',strict:'Strict Mode'};
   var colors={local_mcp:'green',mock_forced:'amber',mock_fallback:'amber',strict:'red'};
 
-  // Badge row
   var badge=document.getElementById('modeBadge');
   badge.textContent=labels[mode]||mode;
-  if(mode==='local_mcp'){badge.style.borderColor='var(--green-border)';badge.style.color='var(--green)'}
-  else if(mode==='strict'){badge.style.borderColor='var(--red-border)';badge.style.color='var(--red)'}
-  else{badge.style.borderColor='var(--amber-border)';badge.style.color='var(--amber)'}
+  if(mode==='local_mcp'){badge.style.borderColor='var(--green-border)';badge.style.color='var(--green)';badge.style.background='var(--green-bg)'}
+  else if(mode==='strict'){badge.style.borderColor='var(--red-border)';badge.style.color='var(--red)';badge.style.background='var(--red-bg)'}
+  else{badge.style.borderColor='var(--amber-border)';badge.style.color='var(--amber)';badge.style.background='var(--amber-bg)'}
 
-  // Mode status bar
   document.getElementById('modeDot').className='mode-dot '+(colors[mode]||'amber');
   document.getElementById('modeLabel').textContent=labels[mode]||mode;
   document.getElementById('modeEndpoint').textContent=d.endpoint||'';
 }).catch(function(){});
 
-// Store last trace for copy
 var _lastTrace=null;
 
 function copyTrace(){
@@ -709,12 +704,12 @@ async function loadProof(){
     var d=await res.json();
     var html='';
     if(d.real_mcp===false){
-      html+='<div style="padding:8px 12px;margin-bottom:12px;border-radius:8px;background:var(--amber-bg);border:1px solid var(--amber-border);color:var(--amber);font-size:13px">⚠️ Running in mock mode — this is not a real MCP proof</div>';
+      html+='<div style="padding:8px 12px;margin-bottom:12px;border-radius:8px;background:var(--amber-bg);border:1px solid var(--amber-border);color:var(--amber);font-size:13px">⚠️ Running in mock mode</div>';
     }else if(d.real_mcp===true){
       html+='<div style="padding:8px 12px;margin-bottom:12px;border-radius:8px;background:var(--green-bg);border:1px solid var(--green-border);color:var(--green);font-size:13px">✅ Connected to real MCP server</div>';
     }
     html+='<div class="proof-row"><span class="proof-label">Mode</span><span class="proof-value">'+escapeHtml(d.mode||'?')+'</span></div>';
-    html+='<div class="proof-row"><span class="proof-label">MCP Server</span><span class="proof-value">'+escapeHtml(d.mcp_server||'?')+'</span></div>';
+    html+='<div class="proof-row"><span class="proof-label">Server</span><span class="proof-value">'+escapeHtml(d.mcp_server||'?')+'</span></div>';
     html+='<div class="proof-row"><span class="proof-label">Endpoint</span><span class="proof-value">'+escapeHtml(d.endpoint||'?')+'</span></div>';
     html+='<div class="proof-row"><span class="proof-label">Routes</span><span class="proof-value">'+(d.routes_count||0)+' routes</span></div>';
     if(d.last_quote&&!d.last_quote.error){

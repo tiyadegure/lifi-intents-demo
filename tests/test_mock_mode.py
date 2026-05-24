@@ -57,7 +57,7 @@ class TestMockModeTools:
         from lifi_agent.agent import LifAgent
         agent = LifAgent()
         result = agent.check_route_health("base", "arbitrum")
-        assert result["data"]["healthy"] is True
+        assert result["data"]["routeSupported"] is True
 
     def test_quote(self):
         from lifi_agent.agent import LifAgent, Intent

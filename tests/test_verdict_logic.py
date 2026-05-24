@@ -22,7 +22,7 @@ def _mock_standard(agent):
                  "fromToken": {"symbol": "USDC", "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}},
             ]
         if tool == "check-route-health":
-            return {"data": {"healthy": True, "status": "healthy"}}
+            return {"data": {"routeSupported": True, "matchingRoutes": 6, "quoteCount": 2, "quotes": [], "recentOrders": []}, "message": "Route looks healthy — supported, quotes active, and recent orders present."}
         if tool == "request-quote":
             return {
                 "data": {
@@ -46,7 +46,7 @@ def _mock_unhealthy(agent):
                  "fromToken": {"symbol": "USDC", "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}},
             ]
         if tool == "check-route-health":
-            return {"data": {"healthy": False, "status": "unhealthy"}}
+            return {"data": {"routeSupported": False, "matchingRoutes": 0, "quoteCount": 0, "quotes": [], "recentOrders": []}, "message": "No supported route found"}
         if tool == "request-quote":
             return {
                 "data": {
@@ -70,7 +70,7 @@ def _mock_no_quote(agent):
                  "fromToken": {"symbol": "USDC", "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}},
             ]
         if tool == "check-route-health":
-            return {"data": {"healthy": True, "status": "healthy"}}
+            return {"data": {"routeSupported": True, "matchingRoutes": 6, "quoteCount": 0, "quotes": [], "recentOrders": []}, "message": "Route looks healthy"}
         if tool == "request-quote":
             return {"data": {"quotes": []}}
         return {"error": f"Unexpected tool: {tool}"}

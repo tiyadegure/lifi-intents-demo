@@ -302,10 +302,26 @@ class LifAgent:
         step_start = time.time()
         if policy.require_healthy_route:
             try:
-                health_result = self.check_route_health(intent.from_chain, intent.to_chain)
+                health_result = self.check_route_health(intent.from_chain_id(), intent.to_chain_id())
                 health_data = health_result.get("data", {})
-                status = health_data.get("status", "unknown")
-                is_healthy = health_data.get("healthy", status.lower() in ["healthy", "ok", "good"])
+                health_message = health_result.get("message", "")
+                
+                # Check for solver API key error
+                if "error" in health_result or "Solver API key" in str(health_message):
+                    status = "api_key_missing"
+                    is_healthy = False
+                else:
+                    # Check routeSupported from MCP server response
+                    route_supported = health_data.get("routeSupported", False)
+                    if route_supported:
+                        status = "healthy"
+                        is_healthy = True
+                    elif "healthy" in health_message.lower() or "looks good" in health_message.lower():
+                        status = "healthy"
+                        is_healthy = True
+                    else:
+                        status = "unhealthy"
+                        is_healthy = False
                 
                 duration = int((time.time() - step_start) * 1000)
                 steps.append(DecisionStep(
@@ -314,7 +330,7 @@ class LifAgent:
                     detail=f"Status: {status.upper()}",
                     duration_ms=duration,
                     mcp_tool="check-route-health",
-                    mcp_args={"fromChain": intent.from_chain, "toChain": intent.to_chain},
+                    mcp_args={"fromChain": intent.from_chain_id(), "toChain": intent.to_chain_id()},
                     mcp_result=health_result
                 ))
                 
@@ -675,8 +691,24 @@ class LifAgent:
         try:
             health_result = self.check_route_health(from_chain, to_chain, from_asset, to_asset)
             health_data = health_result.get("data", {})
-            status = health_data.get("status", "unknown")
-            is_healthy = health_data.get("healthy", status.lower() in ["healthy", "ok", "good"])
+            health_message = health_result.get("message", "")
+            
+            # Check for errors (e.g. missing API key)
+            if "error" in health_result or "Solver API key" in str(health_message):
+                status = "error"
+                is_healthy = False
+            else:
+                # Check routeSupported from MCP server response
+                route_supported = health_data.get("routeSupported", False)
+                if route_supported:
+                    status = "healthy"
+                    is_healthy = True
+                elif "healthy" in health_message.lower() or "looks good" in health_message.lower():
+                    status = "healthy"
+                    is_healthy = True
+                else:
+                    status = "unhealthy"
+                    is_healthy = False
 
             if is_healthy:
                 explanation = (

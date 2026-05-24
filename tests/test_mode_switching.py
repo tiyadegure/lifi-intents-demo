@@ -187,7 +187,7 @@ class TestMockCallReturnsDemoData:
         monkeypatch.setenv("LIFI_AGENT_MOCK_MODE", "1")
         client = MCPClient()
         result = client.call("check-route-health", {})
-        assert result["data"]["healthy"] is True
+        assert result["data"]["routeSupported"] is True
 
     def test_mock_call_unknown_tool(self, monkeypatch):
         """In mock mode, call() with unknown tool returns fallback message."""

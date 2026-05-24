@@ -16,7 +16,7 @@ from typing import Optional, Any
 logger = logging.getLogger(__name__)
 
 MCP_URL = os.environ.get("LIFI_MCP_URL", "http://localhost:3333/mcp")
-
+SOLVER_API_KEY = os.environ.get("SOLVER_API_KEY")
 
 def _is_mock_forced() -> bool:
     """Check if mock mode is forced via env var. Supports both LIFI_AGENT_MOCK_MODE and deprecated LIFI_AGENT_DEMO_MODE."""
@@ -98,6 +98,8 @@ class MCPClient:
         sid = session_id or self.session_id
         if sid:
             h["mcp-session-id"] = sid
+        if SOLVER_API_KEY:
+            h["x-api-key"] = SOLVER_API_KEY
         return h
 
     @staticmethod
@@ -287,7 +289,7 @@ class MCPClient:
 
         if tool == "check-route-health":
             # Always return healthy in demo mode (real API would require a solver API key)
-            return {"data": {"healthy": True, "status": "healthy", "latencyMs": 120, "activeSolvers": 3}}
+            return {"data": {"routeSupported": True, "matchingRoutes": 6, "quoteCount": 2, "quotes": [], "recentOrders": [{"catalystOrderId": "demo-order", "status": "Settled"}]}, "message": "Route looks healthy — supported, quotes active, and recent orders present."}
 
         if tool == "request-quote":
             # Simulate ~0.2% fee with new human-readable format
