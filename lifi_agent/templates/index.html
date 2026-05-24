@@ -57,6 +57,47 @@
   .copy-btn{background:var(--surface);border:1px solid var(--border-subtle);color:var(--text2);padding:6px 14px;border-radius:var(--r-sm);font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s;margin-top:12px}
   .copy-btn:hover{border-color:var(--green-border);color:var(--green)}
 
+  /* Action buttons row */
+  .action-row{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px}
+  .action-btn{background:var(--surface);border:1px solid var(--border-subtle);color:var(--text2);padding:8px 16px;border-radius:var(--r-sm);font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s;font-weight:500}
+  .action-btn:hover{border-color:var(--accent);color:var(--accent)}
+  .action-btn:disabled{opacity:.45;cursor:not-allowed}
+
+  /* Judge / Report results */
+  .report-section{margin:20px 0;padding:20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);animation:fadeSlideIn .3s ease}
+  .report-title{font-size:14px;font-weight:600;color:var(--text);margin-bottom:16px}
+  .report-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border-subtle)}
+  .report-row:last-child{border-bottom:none}
+  .report-step-num{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;background:var(--card);color:var(--text2);flex-shrink:0}
+  .report-name{font-size:13px;font-weight:600;color:var(--text);min-width:120px}
+  .report-verdict{font-size:12px;font-weight:600;padding:2px 10px;border-radius:10px}
+  .report-verdict.match{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+  .report-verdict.mismatch{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+  .report-reason{font-size:12px;color:var(--text2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .report-summary{margin-top:16px;padding-top:12px;border-top:1px solid var(--border);font-size:14px;font-weight:600;color:var(--text)}
+
+  /* Collapsible trace step */
+  .trace-step{cursor:pointer}
+  .trace-step:hover{background:rgba(255,255,255,.02)}
+  .trace-expand{display:none;padding:8px 0 4px 36px;animation:fadeSlideIn .2s ease}
+  .trace-expand.open{display:block}
+  .trace-expand-row{margin-bottom:6px}
+  .trace-expand-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-weight:600;margin-bottom:2px}
+  .trace-expand-value{font-size:12px;color:var(--text2);font-family:var(--mono);line-height:1.5}
+  .trace-expand-value.mono{background:var(--card);padding:6px 10px;border-radius:6px;border:1px solid var(--border-subtle);white-space:pre-wrap;word-break:break-all}
+
+  /* MCP Proof */
+  .proof-section{margin:20px 0}
+  .proof-toggle{background:var(--surface);border:1px solid var(--border);color:var(--text2);padding:10px 16px;border-radius:var(--r-sm);font-size:13px;cursor:pointer;font-family:inherit;transition:all .15s;font-weight:500;width:100%;text-align:left;display:flex;align-items:center;gap:8px}
+  .proof-toggle:hover{border-color:var(--accent)}
+  .proof-toggle .arrow{transition:transform .2s;margin-left:auto}
+  .proof-toggle .arrow.open{transform:rotate(90deg)}
+  .proof-body{display:none;padding:16px;background:var(--surface);border:1px solid var(--border);border-top:none;border-radius:0 0 var(--r-sm) var(--r-sm);animation:fadeSlideIn .2s ease}
+  .proof-body.open{display:block}
+  .proof-row{display:flex;align-items:center;gap:10px;padding:6px 0;font-size:13px}
+  .proof-label{color:var(--text3);min-width:100px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+  .proof-value{color:var(--text);font-family:var(--mono);font-size:12px}
+
   /* Three Column Layout */
   .columns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:24px}
   .col{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px;min-height:300px;transition:border-color .2s}
@@ -175,6 +216,13 @@
     <span class="mode-endpoint" id="modeEndpoint"></span>
   </div>
 
+  <!-- Action Buttons -->
+  <div class="action-row">
+    <button class="action-btn" id="judgeBtn" onclick="runJudgeMode()">🎯 Judge Mode</button>
+    <button class="action-btn" id="reportBtn" onclick="runPresetReport()">📊 Preset Report</button>
+  </div>
+  <div id="reportArea"></div>
+
   <!-- Intent Input -->
   <div class="input-section">
     <div class="input-row">
@@ -248,7 +296,22 @@
           Each safety check step will<br>appear here with pass/fail<br>status and details.
         </div>
       </div>
-      <button class="copy-btn" id="copyBtn" onclick="copyTrace()" style="display:none">Copy Trace JSON</button>
+      <div id="copyBtns" style="display:none;margin-top:12px;gap:8px">
+        <button class="copy-btn" onclick="copyTrace()">Copy Trace JSON</button>
+        <button class="copy-btn" onclick="copyMarkdown()">📋 Copy Markdown</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MCP Proof -->
+  <div class="proof-section">
+    <button class="proof-toggle" onclick="toggleProof()">
+      🔗 MCP Proof <span class="arrow" id="proofArrow">›</span>
+    </button>
+    <div class="proof-body" id="proofBody">
+      <div id="proofContent">
+        <div class="skeleton w60"></div><div class="skeleton w80"></div>
+      </div>
     </div>
   </div>
 
@@ -389,14 +452,30 @@ function renderTrace(steps,verdict,reason,durationMs){
     const icon=step.status==='passed'?'✓':step.status==='failed'?'✗':'⊘';
     const iconClass=step.status==='passed'?'pass':step.status==='failed'?'fail':'skip';
     const delay=(i*0.08).toFixed(2);
+    const stepId='trace-expand-'+i;
 
-    html+='<div class="trace-step" style="animation-delay:'+delay+'s">';
+    html+='<div class="trace-step" style="animation-delay:'+delay+'s" onclick="toggleStep(\''+stepId+'\')">';
     html+='<div class="trace-icon '+iconClass+'">'+icon+'</div>';
     html+='<div class="trace-body">';
     html+='<div class="trace-name">'+escapeHtml(step.name);
     if(step.mcp_tool){html+=' <span class="trace-tool">'+escapeHtml(step.mcp_tool)+'</span>';}
     html+='</div>';
     html+='<div class="trace-detail">'+escapeHtml(step.detail)+'</div>';
+    // Expanded details
+    html+='<div class="trace-expand" id="'+stepId+'">';
+    if(step.purpose){
+      html+='<div class="trace-expand-row"><div class="trace-expand-label">Purpose</div><div class="trace-expand-value">'+escapeHtml(step.purpose)+'</div></div>';
+    }
+    if(step.input_summary){
+      html+='<div class="trace-expand-row"><div class="trace-expand-label">Input</div><div class="trace-expand-value mono">'+escapeHtml(step.input_summary)+'</div></div>';
+    }
+    if(step.output_summary){
+      html+='<div class="trace-expand-row"><div class="trace-expand-label">Output</div><div class="trace-expand-value mono">'+escapeHtml(step.output_summary)+'</div></div>';
+    }
+    if(step.why){
+      html+='<div class="trace-expand-row"><div class="trace-expand-label">Why this matters</div><div class="trace-expand-value">'+escapeHtml(step.why)+'</div></div>';
+    }
+    html+='</div>';
     html+='</div>';
     html+='<div class="trace-time">'+step.duration_ms+'ms</div>';
     html+='</div>';
@@ -416,7 +495,12 @@ function renderTrace(steps,verdict,reason,durationMs){
   html+='</div>';
 
   document.getElementById('traceContent').innerHTML=html;
-  document.getElementById('copyBtn').style.display='block';
+  document.getElementById('copyBtns').style.display='flex';
+}
+
+function toggleStep(id){
+  var el=document.getElementById(id);
+  if(el){el.classList.toggle('open');}
 }
 
 // Enter key to analyze
@@ -451,10 +535,153 @@ function copyTrace(){
   if(!_lastTrace){return;}
   var text=JSON.stringify(_lastTrace,null,2);
   navigator.clipboard.writeText(text).then(function(){
-    var btn=document.getElementById('copyBtn');
-    btn.textContent='Copied!';
-    setTimeout(function(){btn.textContent='Copy Trace JSON'},1500);
+    var btns=document.querySelectorAll('#copyBtns .copy-btn');
+    btns[0].textContent='Copied!';
+    setTimeout(function(){btns[0].textContent='Copy Trace JSON'},1500);
   });
+}
+
+function copyMarkdown(){
+  if(!_lastTrace){return;}
+  var d=_lastTrace;
+  var md='# LI.FI Intents Trace Report\n\n';
+  var intent=d.intent||{};
+  md+='**Intent:** '+intent.amount+' '+intent.token+' '+intent.from_chain+' → '+intent.to_chain+'\n';
+  var policy=d.policy||{};
+  var policyParts=[];
+  if(policy.max_fee_pct!=null)policyParts.push('fee < '+policy.max_fee_pct+'%');
+  if(policy.min_output_amount!=null)policyParts.push('output >= '+policy.min_output_amount);
+  if(policy.avoid_chains&&policy.avoid_chains.length)policyParts.push('avoid '+policy.avoid_chains.join(', '));
+  if(policyParts.length)md+='**Policy:** '+policyParts.join(', ')+'\n';
+  md+='**Verdict:** '+d.verdict+'\n';
+  md+='**Reason:** '+(d.reason||'')+'\n\n';
+  md+='## Steps\n';
+  (d.steps||[]).forEach(function(s,i){
+    var icon=s.status==='passed'?'✅':s.status==='failed'?'❌':'⏭️';
+    md+=(i+1)+'. '+icon+' '+s.name+'\n';
+    if(s.purpose)md+='   - Purpose: '+s.purpose+'\n';
+    if(s.input_summary)md+='   - Input: '+s.input_summary+'\n';
+    if(s.output_summary)md+='   - Output: '+s.output_summary+'\n';
+    md+='   - Detail: '+s.detail+'\n';
+  });
+  navigator.clipboard.writeText(md).then(function(){
+    var btns=document.querySelectorAll('#copyBtns .copy-btn');
+    btns[1].textContent='Copied!';
+    setTimeout(function(){btns[1].textContent='📋 Copy Markdown'},1500);
+  });
+}
+
+// ── Judge Mode ────────────────────────────────────────────────────
+async function runJudgeMode(){
+  var btn=document.getElementById('judgeBtn');
+  btn.disabled=true;
+  btn.innerHTML='<span class="loading"></span> Running...';
+  document.getElementById('reportArea').innerHTML=
+    '<div class="report-section"><div class="skeleton w80"></div><div class="skeleton w60"></div><div class="skeleton w80"></div><div class="skeleton w60"></div><div class="skeleton w40"></div></div>';
+  try{
+    var res=await fetch('/api/judge-mode');
+    var data=await res.json();
+    var results=data.results||[];
+    var matched=results.filter(function(r){return r.match}).length;
+    var html='<div class="report-section">';
+    html+='<div class="report-title">🎯 Judge Mode Results</div>';
+    results.forEach(function(r){
+      html+='<div class="report-row">';
+      html+='<div class="report-step-num">'+r.step_num+'</div>';
+      html+='<div class="report-name">'+escapeHtml(r.preset_name)+'</div>';
+      html+='<div class="report-verdict '+(r.match?'match':'mismatch')+'">';
+      html+=escapeHtml(r.expected_verdict)+' → '+escapeHtml(r.actual_verdict);
+      html+='</div>';
+      html+='<div class="report-reason" title="'+escapeHtml(r.reason)+'">'+escapeHtml(r.reason)+'</div>';
+      html+='</div>';
+    });
+    html+='<div class="report-summary">'+matched+'/'+results.length+' matched</div>';
+    html+='</div>';
+    document.getElementById('reportArea').innerHTML=html;
+  }catch(e){
+    document.getElementById('reportArea').innerHTML=
+      '<div class="status-msg err">✗ Judge Mode failed: '+escapeHtml(e.message)+'</div>';
+  }finally{
+    btn.disabled=false;
+    btn.textContent='🎯 Judge Mode';
+  }
+}
+
+// ── Preset Report ─────────────────────────────────────────────────
+async function runPresetReport(){
+  var btn=document.getElementById('reportBtn');
+  btn.disabled=true;
+  btn.innerHTML='<span class="loading"></span> Running...';
+  document.getElementById('reportArea').innerHTML=
+    '<div class="report-section"><div class="skeleton w80"></div><div class="skeleton w60"></div><div class="skeleton w80"></div><div class="skeleton w60"></div><div class="skeleton w40"></div><div class="skeleton w80"></div><div class="skeleton w60"></div><div class="skeleton w80"></div><div class="skeleton w60"></div><div class="skeleton w40"></div></div>';
+  try{
+    var res=await fetch('/api/preset-report');
+    var data=await res.json();
+    var results=data.results||[];
+    var summary=data.summary||{};
+    var html='<div class="report-section">';
+    html+='<div class="report-title">📊 Preset Report</div>';
+    results.forEach(function(r){
+      html+='<div class="report-row">';
+      html+='<div class="report-name" style="min-width:140px">'+escapeHtml(r.name)+'</div>';
+      html+='<div class="report-verdict '+(r.match?'match':'mismatch')+'">';
+      html+=(r.match?'✅':'❌')+' '+escapeHtml(r.expected)+' → '+escapeHtml(r.actual);
+      html+='</div>';
+      html+='<div class="report-reason" title="'+escapeHtml(r.reason)+'">'+escapeHtml(r.reason)+'</div>';
+      html+='</div>';
+    });
+    html+='<div class="report-summary">'+summary.matched+'/'+summary.total+' matched</div>';
+    html+='</div>';
+    document.getElementById('reportArea').innerHTML=html;
+  }catch(e){
+    document.getElementById('reportArea').innerHTML=
+      '<div class="status-msg err">✗ Preset Report failed: '+escapeHtml(e.message)+'</div>';
+  }finally{
+    btn.disabled=false;
+    btn.textContent='📊 Preset Report';
+  }
+}
+
+// ── MCP Proof ─────────────────────────────────────────────────────
+var _proofLoaded=false;
+
+function toggleProof(){
+  var body=document.getElementById('proofBody');
+  var arrow=document.getElementById('proofArrow');
+  var isOpen=body.classList.toggle('open');
+  arrow.classList.toggle('open',isOpen);
+  if(isOpen&&!_proofLoaded){loadProof();}
+}
+
+async function loadProof(){
+  var el=document.getElementById('proofContent');
+  el.innerHTML='<div class="skeleton w60"></div><div class="skeleton w80"></div>';
+  try{
+    var res=await fetch('/api/mcp-proof');
+    var d=await res.json();
+    var html='';
+    html+='<div class="proof-row"><span class="proof-label">Mode</span><span class="proof-value">'+escapeHtml(d.mode||'?')+'</span></div>';
+    html+='<div class="proof-row"><span class="proof-label">MCP Server</span><span class="proof-value">'+escapeHtml(d.mcp_server||'?')+'</span></div>';
+    html+='<div class="proof-row"><span class="proof-label">Endpoint</span><span class="proof-value">'+escapeHtml(d.endpoint||'?')+'</span></div>';
+    html+='<div class="proof-row"><span class="proof-label">Routes</span><span class="proof-value">'+(d.routes_count||0)+' routes</span></div>';
+    if(d.last_quote&&!d.last_quote.error){
+      var q=d.last_quote;
+      html+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-subtle)">';
+      html+='<div class="proof-row"><span class="proof-label">Last Quote</span><span class="proof-value">'+escapeHtml(q.route||'')+'</span></div>';
+      html+='<div class="proof-row"><span class="proof-label">Input</span><span class="proof-value">'+escapeHtml(q.input||'')+'</span></div>';
+      html+='<div class="proof-row"><span class="proof-label">Output</span><span class="proof-value">'+escapeHtml(q.output||'')+'</span></div>';
+      html+='<div class="proof-row"><span class="proof-label">Fee</span><span class="proof-value">'+escapeHtml(q.fee_pct||'?')+'%</span></div>';
+      html+='<div class="proof-row"><span class="proof-label">Verdict</span><span class="proof-value">'+escapeHtml(q.verdict||'?')+'</span></div>';
+      html+='</div>';
+    }else if(d.last_quote&&d.last_quote.error){
+      html+='<div class="proof-row"><span class="proof-label">Last Quote</span><span class="proof-value" style="color:var(--red)">Error: '+escapeHtml(d.last_quote.error)+'</span></div>';
+    }
+    html+='<div style="margin-top:12px"><button class="action-btn" onclick="_proofLoaded=false;loadProof()">Refresh Proof</button></div>';
+    el.innerHTML=html;
+    _proofLoaded=true;
+  }catch(e){
+    el.innerHTML='<div style="color:var(--red);font-size:13px">Failed to load proof: '+escapeHtml(e.message)+'</div>';
+  }
 }
 </script>
 </body>

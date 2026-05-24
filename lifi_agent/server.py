@@ -13,6 +13,7 @@ import threading
 import time
 
 from lifi_agent.agent import LifAgent, Intent, parse_intent, parse_intent_with_policy
+from lifi_agent.models import Policy
 
 app = FastAPI(title="LI.FI Intents Agent", version="1.0.0")
 agent = LifAgent()
@@ -446,15 +447,95 @@ async def analyze_intent(request: Request):
     duration = int((time.time() - start) * 1000)
     trace_step("analyze-intent", {"text": text}, {"verdict": result.verdict}, duration)
 
-    # Serialize decision steps
+    # Serialize decision steps with MCP inspector fields
+    _STEP_META = {
+        "Parse Intent": {
+            "purpose": "Extract structured intent from natural language",
+            "why": "Natural language must be decomposed into chain IDs, token, and amount before any MCP call.",
+        },
+        "Parse Policy": {
+            "purpose": "Extract policy constraints from natural language",
+            "why": "Policy constraints (fee limits, chain avoidance) are parsed from free text to enforce programmatically.",
+        },
+        "Check Supported Route": {
+            "purpose": "Verify route exists in LI.FI network",
+            "why": "If no solver supports this chain pair, the transfer cannot proceed regardless of quote.",
+        },
+        "Check Route Health": {
+            "purpose": "Verify solver availability for this route",
+            "why": "A supported route may still be unhealthy if solvers are offline or liquidity is depleted.",
+        },
+        "Get Quote": {
+            "purpose": "Request real-time solver quote from LI.FI network",
+            "why": "The quote determines the actual output amount and fee, which policy constraints are evaluated against.",
+        },
+        "Calculate Fee": {
+            "purpose": "Compute transfer fee percentage",
+            "why": "Fee = (input - output) / input * 100. This derived value drives the fee policy check.",
+        },
+        "Fee Policy": {
+            "purpose": "Enforce user-defined fee constraint",
+            "why": "Compares calculated fee against the user's max_fee_pct limit to decide EXECUTABLE vs REFUSED.",
+        },
+        "Output Policy": {
+            "purpose": "Enforce user-defined minimum output constraint",
+            "why": "Ensures the solver's output meets the user's minimum acceptable amount.",
+        },
+        "Avoid Chains": {
+            "purpose": "Enforce user-defined chain avoidance constraint",
+            "why": "The user may want to avoid specific chains for regulatory, cost, or preference reasons.",
+        },
+        "Cross-Chain": {
+            "purpose": "Enforce cross-chain transfer restriction",
+            "why": "Some policies only allow same-chain transfers; this step validates that constraint.",
+        },
+    }
+
     steps = []
     for s in result.steps:
+        meta = _STEP_META.get(s.name, {})
+        # Build input_summary from mcp_args or step detail
+        input_summary = ""
+        if s.mcp_args:
+            input_summary = ", ".join(f"{k}={v}" for k, v in s.mcp_args.items())
+        elif s.name == "Parse Intent":
+            input_summary = f'"{text}"'
+        elif s.name == "Parse Policy":
+            input_summary = f'"{text}"'
+        elif s.name == "Calculate Fee":
+            input_summary = f"input={intent.amount}, output={s.detail.split(':')[-1].strip().rstrip('%') if ':' in s.detail else '?'}"
+
+        # Build output_summary from mcp_result or detail
+        output_summary = ""
+        if s.mcp_result:
+            if s.mcp_tool == "get-supported-routes":
+                route_count = len(s.mcp_result.get("data", {}).get("routes", []))
+                output_summary = f"{route_count} routes found"
+            elif s.mcp_tool == "request-quote":
+                quotes = s.mcp_result.get("data", {}).get("quotes", [])
+                if quotes:
+                    q = quotes[0]
+                    output_summary = f"output={q.get('outputAmount', '?')}, quoteId={q.get('quoteId', '?')[:16]}..."
+                else:
+                    output_summary = "No quotes returned"
+            elif s.mcp_tool == "check-route-health":
+                status = s.mcp_result.get("data", {}).get("status", "unknown")
+                output_summary = f"status={status}"
+        elif s.name == "Calculate Fee":
+            output_summary = s.detail
+        elif s.name in ("Fee Policy", "Output Policy", "Avoid Chains", "Cross-Chain"):
+            output_summary = s.detail
+
         steps.append({
             "name": s.name,
             "status": s.status,
             "detail": s.detail,
             "duration_ms": s.duration_ms,
             "mcp_tool": s.mcp_tool,
+            "purpose": meta.get("purpose", ""),
+            "input_summary": input_summary,
+            "output_summary": output_summary,
+            "why": meta.get("why", ""),
         })
 
     return {
@@ -482,6 +563,149 @@ async def analyze_intent(request: Request):
         "reason": result.reason,
         "steps": steps,
         "total_duration_ms": result.total_duration_ms,
+    }
+
+
+# ── Judge Mode ──────────────────────────────────────────────────────
+
+@app.get("/api/judge-mode")
+async def judge_mode():
+    """Run 5 key presets sequentially and compare expected vs actual verdict."""
+    await asyncio.to_thread(ensure_connected)
+    judge_presets = ["safe-transfer", "fee-too-high", "avoid-chain", "min-output", "doctor"]
+    results = []
+
+    for i, name in enumerate(judge_presets, 1):
+        if name == "doctor":
+            report = await asyncio.to_thread(agent.doctor)
+            results.append({
+                "step_num": i,
+                "preset_name": "doctor",
+                "description": "Run diagnostic checks on MCP connection",
+                "expected_verdict": "PASS",
+                "actual_verdict": "PASS" if not any(
+                    not c["passed"] for g in report.get("groups", []) for c in g.get("checks", [])
+                ) else "FAIL",
+                "match": not any(
+                    not c["passed"] for g in report.get("groups", []) for c in g.get("checks", [])
+                ),
+                "reason": f"Mode: {report.get('mode', '?')}, Endpoint: {report.get('endpoint', '?')}",
+            })
+            continue
+
+        preset = PRESETS.get(name)
+        if not preset:
+            continue
+        try:
+            intent_data = preset["intent"]
+            intent = Intent(intent_data["from_chain"], intent_data["to_chain"],
+                            intent_data["token"], intent_data["amount"])
+            policy = Policy(**{k: v for k, v in preset["policy"].items() if hasattr(Policy, k)})
+            result = await asyncio.to_thread(agent.safe_verdict_trace, intent, policy)
+            actual = result.verdict
+            expected = preset.get("expected_verdict", "EXECUTABLE")
+            results.append({
+                "step_num": i,
+                "preset_name": name,
+                "description": preset["description"],
+                "expected_verdict": expected,
+                "actual_verdict": actual,
+                "match": expected == actual,
+                "reason": result.reason,
+            })
+        except Exception as e:
+            results.append({
+                "step_num": i,
+                "preset_name": name,
+                "description": preset.get("description", ""),
+                "expected_verdict": preset.get("expected_verdict", "EXECUTABLE"),
+                "actual_verdict": "ERROR",
+                "match": False,
+                "reason": str(e),
+            })
+
+    return {"results": results}
+
+
+# ── Preset Report ───────────────────────────────────────────────────
+
+@app.get("/api/preset-report")
+async def preset_report():
+    """Run ALL 10 presets and compare expected vs actual verdict."""
+    await asyncio.to_thread(ensure_connected)
+    results = []
+
+    for name, preset in PRESETS.items():
+        try:
+            intent_data = preset["intent"]
+            intent = Intent(intent_data["from_chain"], intent_data["to_chain"],
+                            intent_data["token"], intent_data["amount"])
+            policy = Policy(**{k: v for k, v in preset["policy"].items() if hasattr(Policy, k)})
+            result = await asyncio.to_thread(agent.safe_verdict_trace, intent, policy)
+            actual = result.verdict
+            expected = preset.get("expected_verdict", "EXECUTABLE")
+            results.append({
+                "name": name,
+                "expected": expected,
+                "actual": actual,
+                "match": expected == actual,
+                "reason": result.reason,
+            })
+        except Exception as e:
+            results.append({
+                "name": name,
+                "expected": preset.get("expected_verdict", "EXECUTABLE"),
+                "actual": "ERROR",
+                "match": False,
+                "reason": str(e),
+            })
+
+    matched = sum(1 for r in results if r["match"])
+    return {
+        "results": results,
+        "summary": {
+            "total": len(results),
+            "matched": matched,
+            "mismatched": len(results) - matched,
+        },
+    }
+
+
+# ── MCP Proof ───────────────────────────────────────────────────────
+
+@app.get("/api/mcp-proof")
+async def mcp_proof():
+    """Prove the project uses real MCP connections by running a live quote."""
+    await asyncio.to_thread(ensure_connected)
+    start = time.time()
+    try:
+        intent = Intent("base", "arbitrum", "usdc", "1")
+        result = await asyncio.to_thread(agent.get_quote, intent)
+        quotes = result.get("data", {}).get("quotes", [])
+        last_quote = None
+        if quotes:
+            q = quotes[0]
+            fee_pct = agent._calc_fee("1", q.get("outputAmount", "0"), "usdc")
+            last_quote = {
+                "route": "Base → Arbitrum",
+                "input": "1 USDC",
+                "output": q.get("outputAmount", "?"),
+                "fee_pct": fee_pct,
+                "verdict": "EXECUTABLE",
+                "timestamp": time.time(),
+            }
+        routes_result = await asyncio.to_thread(agent.get_routes)
+        routes_count = len(routes_result.get("data", {}).get("routes", []))
+    except Exception as e:
+        last_quote = {"error": str(e), "timestamp": time.time()}
+        routes_count = 0
+
+    return {
+        "mode": agent.mcp.mode,
+        "mcp_server": "LI.FI Intents MCP",
+        "endpoint": agent.mcp.url,
+        "routes_count": routes_count,
+        "last_quote": last_quote,
     }
 
 
