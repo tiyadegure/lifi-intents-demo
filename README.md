@@ -153,6 +153,34 @@ PITFALLS.md         # 10 LI.FI Intents MCP pitfalls I hit while building this
 
 ---
 
+## Testing
+
+```bash
+# Install dev dependencies
+pip install -e ".[dev]"
+
+# Run all tests
+pytest
+
+# Run with verbose output
+pytest -v
+
+# Run a specific test file
+pytest tests/test_safe_verdict.py -v
+
+# Run a specific test class
+pytest tests/test_policy_parser.py::TestParsePolicyFee -v
+```
+
+**Test coverage:**
+- `test_models.py` — amount parsing, normalize_output_amount, raw↔human conversion
+- `test_policy_parser.py` — fee, avoid, min output, healthy route, same-chain only
+- `test_safe_verdict.py` — EXECUTABLE, REFUSED (fee/output/avoid/cross-chain), decision trace
+- `test_mcp_client.py` — SSE parsing, mock mode, cache (mocked HTTP), rate limiting
+- `test_mode_property.py` — local_mcp, mock_forced, mock_fallback, strict mode
+
+---
+
 ## Why this matters
 
 LI.FI Intents MCP is a new protocol. Most developers will hit the same issues I did — SSE responses, session management, token address mapping, amount unit conversion.
