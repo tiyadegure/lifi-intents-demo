@@ -112,38 +112,66 @@ class TestMockMode:
 # ── Caching ───────────────────────────────────────────────────────
 
 class TestCaching:
-    def test_cache_hit(self, monkeypatch):
-        monkeypatch.setenv("LIFI_AGENT_MOCK_MODE", "1")
-        client = MCPClient()
-        # First call populates cache
+    """Test cache behavior with mocked HTTP (not mock mode, which bypasses cache)."""
+
+    def _make_local_client(self):
+        """Create a client in local mode (not mock) with mocked HTTP transport."""
+        # Ensure mock mode env vars don't leak from other test modules
+        os.environ.pop("LIFI_AGENT_MOCK_MODE", None)
+        os.environ.pop("LIFI_AGENT_DEMO_MODE", None)
+        client = MCPClient(url="http://localhost:3333/mcp")
+        # Pre-set session so call() doesn't try to connect
+        client.session_id = "test-session"
+        client._connected = True
+        # Mock the sync HTTP client
+        mock_http = MagicMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        payload = {"result": {"content": [{"type": "text", "text": '{"data": {"quotes": [{"outputAmount": "9.98"}]}}'}]}}
+        mock_response.text = f"data: {json.dumps(payload)}\n\n"
+        mock_http.post.return_value = mock_response
+        client._sync_client = mock_http
+        return client
+
+    def test_cache_hit(self):
+        """Second call with same args returns cached result without HTTP request."""
+        client = self._make_local_client()
         result1 = client.call("request-quote", {"amount": "10"}, use_cache=True)
-        # Second call should hit cache (same result)
         result2 = client.call("request-quote", {"amount": "10"}, use_cache=True)
         assert result1 == result2
+        # HTTP should only be called once (second hit comes from cache)
+        assert client._sync_client.post.call_count == 1
 
-    def test_cache_disabled(self, monkeypatch):
-        monkeypatch.setenv("LIFI_AGENT_MOCK_MODE", "1")
-        client = MCPClient()
+    def test_cache_disabled(self):
+        """With use_cache=False, HTTP is called every time."""
+        client = self._make_local_client()
         result1 = client.call("request-quote", {"amount": "10"}, use_cache=False)
         result2 = client.call("request-quote", {"amount": "10"}, use_cache=False)
-        # Both should return valid results (may or may not be same object)
-        assert "data" in result1 or "error" in result1
-        assert "data" in result2 or "error" in result2
+        assert "data" in result1
+        assert "data" in result2
+        # HTTP called twice (no cache)
+        assert client._sync_client.post.call_count == 2
 
-    def test_cleanup_expired(self, monkeypatch):
-        monkeypatch.setenv("LIFI_AGENT_MOCK_MODE", "1")
+    def test_different_args_different_cache(self):
+        """Different args produce different cache keys."""
+        client = self._make_local_client()
+        client.call("request-quote", {"amount": "10"}, use_cache=True)
+        client.call("request-quote", {"amount": "20"}, use_cache=True)
+        # Two different calls → two HTTP requests
+        assert client._sync_client.post.call_count == 2
+
+    def test_cleanup_expired(self):
+        """Expired cache entries are removed by _cleanup_cache()."""
         client = MCPClient()
-        # Manually insert an expired entry
         client._cache["expired:key"] = (time.time() - 600, {"stale": True})
         client._cache["fresh:key"] = (time.time(), {"fresh": True})
         client._cleanup_cache()
         assert "expired:key" not in client._cache
         assert "fresh:key" in client._cache
 
-    def test_cleanup_max_size(self, monkeypatch):
-        monkeypatch.setenv("LIFI_AGENT_MOCK_MODE", "1")
+    def test_cleanup_max_size(self):
+        """Cache enforces MAX_CACHE_SIZE limit."""
         client = MCPClient()
-        # Fill cache beyond max
         for i in range(205):
             client._cache[f"key:{i}"] = (time.time() - 200 + i, {"i": i})
         client._cleanup_cache()

@@ -327,3 +327,51 @@ class TestSafeVerdictCombined:
 
         verdict = agent.safe_verdict(intent, policy)
         assert verdict.executable is False
+
+
+# ── Tests: Cross-chain policy ─────────────────────────────────────
+
+class TestSafeVerdictCrossChain:
+    def test_cross_chain_blocked(self):
+        """allow_cross_chain=False + cross-chain intent → REFUSED"""
+        agent = _make_agent()
+        _mock_mcp_routes(agent)
+
+        intent = Intent("base", "arbitrum", "usdc", "10")  # cross-chain
+        policy = Policy(allow_cross_chain=False)
+
+        verdict = agent.safe_verdict(intent, policy)
+        assert verdict.executable is False
+
+    def test_same_chain_allowed(self):
+        """allow_cross_chain=False + same-chain intent → EXECUTABLE"""
+        agent = _make_agent()
+        # Mock routes for base→base
+        def side_effect(tool, args=None):
+            if tool == "get-supported-routes":
+                return [{"fromChainId": 8453, "toChainId": 8453,
+                         "fromChain": "Base", "toChain": "Base",
+                         "fromToken": {"symbol": "USDC"}}]
+            if tool == "request-quote":
+                return {"data": {"quotes": [{"inputAmount": "10 USDC",
+                                              "outputAmount": "9.980000 USDC",
+                                              "quoteId": "q1"}]}}
+            return {"error": f"Unexpected: {tool}"}
+        agent.mcp.call.side_effect = side_effect
+
+        intent = Intent("base", "base", "usdc", "10")  # same chain
+        policy = Policy(allow_cross_chain=False)
+
+        verdict = agent.safe_verdict(intent, policy)
+        assert verdict.executable is True
+
+    def test_cross_chain_allowed_by_default(self):
+        """Default policy allows cross-chain → EXECUTABLE"""
+        agent = _make_agent()
+        _mock_mcp_routes(agent)
+
+        intent = Intent("base", "arbitrum", "usdc", "10")
+        policy = Policy()  # default: allow_cross_chain=True
+
+        verdict = agent.safe_verdict(intent, policy)
+        assert verdict.executable is True

@@ -50,12 +50,13 @@ The parser uses a **deterministic regex engine** by default, with optional LLM f
 
 The LI.FI Intents MCP server can run locally in stateless HTTP mode, which is more reliable than the hosted version (which has session management issues).
 
-### Two modes
+### Three modes
 
-The CLI supports two modes and automatically selects the best one on startup:
+The CLI supports three modes and automatically selects the best one on startup:
 
 - **Primary: Local MCP Mode** — connects to the local MCP server at `localhost:3333/mcp` (configurable via `LIFI_MCP_URL`). Full solver quotes, real-time route health, and inventory checks.
 - **Fallback: Mock Mode** — if the local MCP server is not running, the CLI automatically falls back to mock data. Useful for testing the UI and Safe Verdict logic without an MCP server.
+- **Strict Mode** — forces real MCP only. If the server is unreachable, the CLI raises an error instead of falling back to mock. Use this when you need to guarantee real solver data.
 
 To force mock mode regardless of server availability:
 
@@ -63,7 +64,15 @@ To force mock mode regardless of server availability:
 export LIFI_AGENT_MOCK_MODE=1
 ```
 
-The CLI prints which mode is active on startup.
+To enable strict mode (no mock fallback):
+
+```bash
+export LIFI_AGENT_STRICT_MODE=1
+```
+
+> **Note:** Setting both `LIFI_AGENT_STRICT_MODE=1` and `LIFI_AGENT_MOCK_MODE=1` raises a conflict error.
+
+Run `python -m lifi_agent doctor` to see the current mode, endpoint, and diagnostics.
 
 ### Setup
 
