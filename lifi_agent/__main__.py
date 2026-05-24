@@ -11,9 +11,12 @@ if __name__ == "__main__":
         agent = LifAgent()
 
         if text == "doctor":
-            report = agent.doctor()
-            json_str = json.dumps(report, indent=2)
-            console.print(Syntax(json_str, "json", theme="monokai"))
+            try:
+                report = agent.doctor()
+                json_str = json.dumps(report, indent=2)
+                console.print(Syntax(json_str, "json", theme="monokai"))
+            finally:
+                agent.close()
         elif text.startswith("explain "):
             try:
                 result = agent.explain(text[8:])
@@ -21,6 +24,8 @@ if __name__ == "__main__":
                 console.print(Syntax(json_str, "json", theme="monokai"))
             except ValueError as e:
                 console.print(f"[red]Error:[/red] {e}")
+            finally:
+                agent.close()
         elif text.startswith("safe "):
             from .agent import parse_intent_with_policy
             agent.connect()

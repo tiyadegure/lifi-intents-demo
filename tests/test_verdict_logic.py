@@ -188,18 +188,25 @@ class TestCrossChainBlocked:
 
     def test_same_chain_allowed(self):
         agent = _make_agent()
-        _mock_standard(agent)
+        # Include a base→base route in the mock
+        def side_effect(tool, args=None):
+            if tool == "get-supported-routes":
+                return [
+                    {"fromChainId": 8453, "toChainId": 8453,
+                     "fromChain": "Base", "toChain": "Base",
+                     "fromToken": {"symbol": "USDC", "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}},
+                ]
+            if tool == "request-quote":
+                return {"data": {"quotes": [{"inputAmount": "10 USDC",
+                                              "outputAmount": "9.980000 USDC",
+                                              "quoteId": "q1"}]}}
+            return {"error": f"Unexpected: {tool}"}
+        agent.mcp.call.side_effect = side_effect
         verdict = agent.safe_verdict(
             Intent("base", "base", "usdc", "10"),
             Policy(allow_cross_chain=False)
         )
-        # Same-chain: from_chain == to_chain, but parse_intent would reject this
-        # So we test with allow_cross_chain=True (default) and cross-chain intent
-        verdict2 = agent.safe_verdict(
-            Intent("base", "arbitrum", "usdc", "10"),
-            Policy(allow_cross_chain=True)
-        )
-        assert verdict2.executable is True
+        assert verdict.executable is True
 
 
 # ── Cheapest route ────────────────────────────────────────────────

@@ -40,10 +40,10 @@ class TestIntentChainName:
         assert i.to_chain_name() == "optimism"
 
     def test_chain_name_preserves_case(self):
-        """chain_name() returns the stored value as-is."""
+        """chain_name() returns the stored value (always lowercased)."""
         i = Intent("Ethereum", "Base", "usdc", "10")
-        assert i.from_chain_name() == "Ethereum"
-        assert i.to_chain_name() == "Base"
+        assert i.from_chain_name() == "ethereum"
+        assert i.to_chain_name() == "base"
 
 
 # ── Intent.token_symbol ───────────────────────────────────────────
@@ -218,6 +218,11 @@ class TestNormalizeOutputAmount:
         """Empty string → 0.0"""
         result = normalize_output_amount("", "10", "usdc")
         assert result == 0.0
+
+    def test_small_input_with_human_output(self):
+        """Small input (0.001) with human-readable output (0.000998) should not be misclassified as raw."""
+        result = normalize_output_amount("0.000998", "0.001", "usdc")
+        assert abs(result - 0.000998) < 0.000001
 
 
 # ── raw amount / human amount compatibility ────────────────────────

@@ -305,7 +305,7 @@ class LifAgent:
                 health_result = self.check_route_health(intent.from_chain, intent.to_chain)
                 health_data = health_result.get("data", {})
                 status = health_data.get("status", "unknown")
-                is_healthy = status.lower() in ["healthy", "ok", "good"]
+                is_healthy = health_data.get("healthy", status.lower() in ["healthy", "ok", "good"])
                 
                 duration = int((time.time() - step_start) * 1000)
                 steps.append(DecisionStep(
@@ -676,7 +676,7 @@ class LifAgent:
             health_result = self.check_route_health(from_chain, to_chain, from_asset, to_asset)
             health_data = health_result.get("data", {})
             status = health_data.get("status", "unknown")
-            is_healthy = status.lower() in ["healthy", "ok", "good"]
+            is_healthy = health_data.get("healthy", status.lower() in ["healthy", "ok", "good"])
 
             if is_healthy:
                 explanation = (

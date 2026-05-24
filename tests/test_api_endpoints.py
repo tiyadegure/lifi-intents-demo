@@ -1,11 +1,14 @@
 """Tests for Web API endpoints: /api/status, /api/presets, /api/preset/{name}, /api/analyze-intent, /api/doctor."""
 
-import os
-os.environ["LIFI_AGENT_MOCK_MODE"] = "1"
-
 import pytest
 from fastapi.testclient import TestClient
 from lifi_agent.server import app, PRESETS
+
+
+@pytest.fixture(autouse=True)
+def _mock_mode(monkeypatch):
+    monkeypatch.setenv("LIFI_AGENT_MOCK_MODE", "1")
+
 
 client = TestClient(app)
 

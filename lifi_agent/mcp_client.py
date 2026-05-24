@@ -130,7 +130,10 @@ class MCPClient:
             if line.strip().startswith('data:'):
                 js = line.strip()[5:].strip()
                 if js:
-                    d = json.loads(js)
+                    try:
+                        d = json.loads(js)
+                    except json.JSONDecodeError:
+                        continue
                     return d.get("result", {})
         return {}
 

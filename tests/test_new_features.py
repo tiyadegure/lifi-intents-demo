@@ -1,9 +1,12 @@
 """Tests for explain(), solver_aware_checks(), and safe_verdict_trace()."""
-import os
-os.environ["LIFI_AGENT_MOCK_MODE"] = "1"
 
 import pytest
 from lifi_agent.agent import LifAgent, Intent, Policy, parse_intent_with_policy
+
+
+@pytest.fixture(autouse=True)
+def _mock_mode(monkeypatch):
+    monkeypatch.setenv("LIFI_AGENT_MOCK_MODE", "1")
 
 
 @pytest.fixture

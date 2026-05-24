@@ -137,7 +137,8 @@ def normalize_output_amount(output_amount: str, input_amount: str, token: str) -
         out_str = ''.join(c for c in output_amount if c.isdigit() or c == '.')
         out_raw = float(out_str)
         inp = float(input_amount)
-        if out_raw > inp * 1000:
+        # Only treat as raw if it's a pure integer (no decimal) and much larger than input
+        if out_str.isdigit() and out_raw > inp * 1000:
             return raw_to_amount(output_amount, token)
         return out_raw
     except (ValueError, ZeroDivisionError):
@@ -148,8 +149,8 @@ def normalize_output_amount(output_amount: str, input_amount: str, token: str) -
 
 class Intent:
     def __init__(self, from_chain: str, to_chain: str, token: str, amount: str, address: str = DEMO_ADDRESS):
-        self.from_chain = from_chain
-        self.to_chain = to_chain
+        self.from_chain = from_chain.lower()
+        self.to_chain = to_chain.lower()
         self.token = token.lower()
         self.amount = amount
         self.address = address
