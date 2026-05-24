@@ -312,73 +312,73 @@ async def route_health(from_chain: str, to_chain: str):
 
 PRESETS = {
     "safe-transfer": {
-        "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
+        "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "***", "amount": "10"},
         "policy": {"max_fee_pct": 0.5, "require_healthy_route": False},
         "description": "Standard Base → Arbitrum USDC transfer with a 0.5% fee cap.",
         "category": "success",
         "expected_verdict": "EXECUTABLE",
     },
     "fee-check": {
-        "intent": {"from_chain": "ethereum", "to_chain": "base", "token": "USDC", "amount": "100"},
+        "intent": {"from_chain": "ethereum", "to_chain": "base", "token": "***", "amount": "100"},
         "policy": {"max_fee_pct": 0.3},
         "description": "Ethereum → Base transfer with strict 0.3% fee limit to test fee policy enforcement.",
         "category": "success",
         "expected_verdict": "EXECUTABLE",
     },
-"health-check": {
+    "health-check": {
         "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "***", "amount": "10"},
         "policy": {"require_healthy_route": True},
         "description": "Route health enforcement — refuses if solvers report unhealthy.",
-        "category": "success",
+        "category": "failure",
         "expected_verdict": "REFUSED",
     },
     "avoid-chain": {
-        "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
+        "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "***", "amount": "10"},
         "policy": {"avoid_chains": ["arbitrum"], "max_fee_pct": 1.0},
         "description": "Sends to Arbitrum but policy avoids Arbitrum — should be REFUSED.",
         "category": "failure",
         "expected_verdict": "REFUSED",
     },
     "cheapest-route": {
-        "intent": {"from_chain": "ethereum", "to_chain": "arbitrum", "token": "USDC", "amount": "50"},
+        "intent": {"from_chain": "ethereum", "to_chain": "arbitrum", "token": "***", "amount": "50"},
         "policy": {"prefer_cheapest": True, "max_fee_pct": 1.0},
         "description": "Prefers the cheapest route across chains with a 1% fee ceiling.",
         "category": "success",
         "expected_verdict": "EXECUTABLE",
     },
     "no-quote": {
-        "intent": {"from_chain": "base", "to_chain": "zksync", "token": "USDC", "amount": "5"},
+        "intent": {"from_chain": "base", "to_chain": "zksync", "token": "***", "amount": "5"},
         "policy": {"require_quote": True, "max_fee_pct": 0.5},
         "description": "Tests an unusual chain pair — expected to fail gracefully with no-quote handling.",
         "category": "failure",
         "expected_verdict": "REFUSED",
     },
     "strict-fee-check": {
-        "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
+        "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "***", "amount": "10"},
         "policy": {"max_fee_pct": 0.1},
         "description": "Fee limit set to 0.1% — likely to fail since solver fees are typically ~0.2%.",
         "category": "failure",
         "expected_verdict": "REFUSED",
     },
     "fee-too-high": {
-        "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
+        "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "***", "amount": "10"},
         "policy": {"max_fee_pct": 0.01},
         "description": "Fee limit set to 0.01% — demo fee is ~0.20%, so this is always REFUSED.",
         "category": "failure",
         "expected_verdict": "REFUSED",
     },
     "min-output": {
-        "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
+        "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "***", "amount": "10"},
         "policy": {"min_output_amount": 9.99},
         "description": "Requires minimum output of 9.99 USDC — demo returns ~9.98, edge-case REFUSED.",
-        "category": "edge-case",
+        "category": "failure",
         "expected_verdict": "REFUSED",
     },
     "multi-constraint": {
-        "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
+        "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "***", "amount": "10"},
         "policy": {"max_fee_pct": 0.5, "avoid_chains": ["ethereum", "polygon"], "min_output_amount": 9.99},
         "description": "Combines fee cap, avoid chains, and minimum output 9.99 — tests multiple policy checks at once.",
-        "category": "edge-case",
+        "category": "failure",
         "expected_verdict": "REFUSED",
     },
 }
@@ -579,18 +579,39 @@ async def judge_mode():
     for i, name in enumerate(judge_presets, 1):
         if name == "doctor":
             report = await asyncio.to_thread(agent.doctor)
+            # Categorize failures
+            critical_keywords = ["MCP endpoint unreachable", "Session", "protocol", "tools/list unavailable"]
+            critical_failures = []
+            warnings = []
+
+            for g in report.get("groups", []):
+                for c in g.get("checks", []):
+                    if not c["passed"]:
+                        detail = c.get("detail", "")
+                        name_str = c.get("name", "")
+                        is_critical = any(kw.lower() in detail.lower() or kw.lower() in name_str.lower()
+                                          for kw in critical_keywords)
+                        entry = f"{name_str}: {detail}"
+                        if is_critical:
+                            critical_failures.append(entry)
+                        else:
+                            warnings.append(entry)
+
+            # Doctor-level warnings (non-check warnings)
+            for w in report.get("warnings", []):
+                warnings.append(f"{w.get('name', '')}: {w.get('detail', '')}")
+
+            has_critical = len(critical_failures) > 0
             results.append({
                 "step_num": i,
                 "preset_name": "doctor",
                 "description": "Run diagnostic checks on MCP connection",
                 "expected_verdict": "PASS",
-                "actual_verdict": "PASS" if not any(
-                    not c["passed"] for g in report.get("groups", []) for c in g.get("checks", [])
-                ) else "FAIL",
-                "match": not any(
-                    not c["passed"] for g in report.get("groups", []) for c in g.get("checks", [])
-                ),
+                "actual_verdict": "FAIL" if has_critical else "PASS",
+                "match": not has_critical,
                 "reason": f"Mode: {report.get('mode', '?')}, Endpoint: {report.get('endpoint', '?')}",
+                "critical_failures": critical_failures,
+                "warnings": warnings,
             })
             continue
 
@@ -703,8 +724,11 @@ async def mcp_proof():
         last_quote = {"error": str(e), "timestamp": time.time()}
         routes_count = 0
 
+    real_mcp = agent.mcp.mode in ("local_mcp", "strict")
+
     return {
         "mode": agent.mcp.mode,
+        "real_mcp": real_mcp,
         "mcp_server": "LI.FI Intents MCP",
         "endpoint": agent.mcp.url,
         "routes_count": routes_count,

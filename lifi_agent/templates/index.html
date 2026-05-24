@@ -231,14 +231,9 @@
       <button class="btn" id="analyzeBtn" onclick="analyzeIntent()">Analyze</button>
     </div>
     <div class="preset-section">
-      <div class="preset-label">Preset Scenarios</div>
-      <div class="presets">
-        <button class="preset-btn safe" onclick="setPreset(this,'send 10 USDC from Base to Arbitrum')">🟢 Safe Transfer</button>
-        <button class="preset-btn refuse" onclick="setPreset(this,'send 10 USDC from Base to Arbitrum only if fee < 0.01%')">🔴 Fee Too High</button>
-        <button class="preset-btn safe" onclick="setPreset(this,'send 10 USDC from Base to Arbitrum require healthy route')">🟢 Healthy Route</button>
-        <button class="preset-btn refuse" onclick="setPreset(this,'send 10 USDC from Base to Arbitrum avoid Base')">🔴 Avoid Chain</button>
-        <button class="preset-btn safe" onclick="setPreset(this,'send 10 USDC from Base to Arbitrum min output 9.5')">🟢 Min Output</button>
-        <button class="preset-btn refuse" onclick="setPreset(this,'send 10 USDC from Base to Arbitrum min output 100')">🔴 Min Too High</button>
+      <div class="preset-label">Core Presets</div>
+      <div class="presets" id="presetButtons">
+        <span style="color:var(--text3);font-size:12px">Loading presets...</span>
       </div>
     </div>
   </div>
@@ -351,6 +346,48 @@ function setPreset(btn,value){
   btn.classList.add('active');
 }
 
+function buildIntentText(intent){
+  var t='send '+intent.amount+' '+intent.token+' from '+intent.from_chain+' to '+intent.to_chain;
+  return t;
+}
+
+async function loadPresets(){
+  try{
+    var res=await fetch('/api/presets');
+    var data=await res.json();
+    var presets=data.presets||[];
+    var container=document.getElementById('presetButtons');
+    if(!presets.length){container.innerHTML='<span style="color:var(--text3);font-size:12px">No presets available</span>';return;}
+
+    // Group by category
+    var groups={success:[],failure:[],other:[]};
+    presets.forEach(function(p){
+      var cat=p.category||'other';
+      if(cat==='success')groups.success.push(p);
+      else if(cat==='failure')groups.failure.push(p);
+      else groups.other.push(p);
+    });
+
+    var html='';
+    ['success','failure','other'].forEach(function(cat){
+      if(!groups[cat].length)return;
+      if(html)html+='<div style="width:100%;height:0"></div>';
+      groups[cat].forEach(function(p){
+        var cls=p.expected_verdict==='EXECUTABLE'?'safe':'refuse';
+        var icon=p.expected_verdict==='EXECUTABLE'?'🟢':'🔴';
+        var intentText=buildIntentText(p.intent);
+        html+='<button class="preset-btn '+cls+'" onclick="setPreset(this,\''+intentText.replace(/'/g,"\\'")+'\')" title="'+escapeHtml(p.description)+'">'+icon+' '+escapeHtml(p.name)+'</button>';
+      });
+    });
+    container.innerHTML=html;
+  }catch(e){
+    document.getElementById('presetButtons').innerHTML='<span style="color:var(--text3);font-size:12px">Failed to load presets</span>';
+  }
+}
+
+// Load presets on page load
+loadPresets();
+
 async function analyzeIntent(){
   const input=document.getElementById('intentInput');
   const text=input.value.trim();
@@ -380,8 +417,11 @@ async function analyzeIntent(){
     const data=await res.json();
 
     if(data.error){
+      var errMsg=data.message||String(data.error);
+      if(data.code)errMsg='['+escapeHtml(data.code)+'] '+errMsg;
+      if(data.next_action)errMsg+=' — '+escapeHtml(data.next_action);
       document.getElementById('statusArea').innerHTML=
-        '<div class="status-msg err">✗ '+escapeHtml(data.error)+'</div>';
+        '<div class="status-msg err">✗ '+errMsg+'</div>';
       resetColumns();
       return;
     }
@@ -660,6 +700,11 @@ async function loadProof(){
     var res=await fetch('/api/mcp-proof');
     var d=await res.json();
     var html='';
+    if(d.real_mcp===false){
+      html+='<div style="padding:8px 12px;margin-bottom:12px;border-radius:8px;background:var(--amber-bg);border:1px solid var(--amber-border);color:var(--amber);font-size:13px">⚠️ Running in mock mode — this is not a real MCP proof</div>';
+    }else if(d.real_mcp===true){
+      html+='<div style="padding:8px 12px;margin-bottom:12px;border-radius:8px;background:var(--green-bg);border:1px solid var(--green-border);color:var(--green);font-size:13px">✅ Connected to real MCP server</div>';
+    }
     html+='<div class="proof-row"><span class="proof-label">Mode</span><span class="proof-value">'+escapeHtml(d.mode||'?')+'</span></div>';
     html+='<div class="proof-row"><span class="proof-label">MCP Server</span><span class="proof-value">'+escapeHtml(d.mcp_server||'?')+'</span></div>';
     html+='<div class="proof-row"><span class="proof-label">Endpoint</span><span class="proof-value">'+escapeHtml(d.endpoint||'?')+'</span></div>';
