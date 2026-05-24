@@ -37,7 +37,7 @@ List all demo presets with intent + policy config.
       "intent": {
         "from_chain": "base",
         "to_chain": "arbitrum",
-        "token": "***",
+        "token": "USDC",
         "amount": "10"
       },
       "policy": {
