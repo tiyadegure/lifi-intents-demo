@@ -174,15 +174,83 @@ class TestParseAmountWithSymbol:
         assert parse_amount_with_symbol("100 USDT") == 100.0
 
 
-# ── amount_to_raw / round-trip ────────────────────────────────────
+# ── normalize_output_amount ────────────────────────────────────────
 
-class TestAmountRoundTrip:
-    def test_usdc_roundtrip(self):
+class TestNormalizeOutputAmount:
+    """normalize_output_amount handles both new human-readable and old raw formats."""
+
+    def test_new_format_usdc(self):
+        """New format: '9.980000 USDC' → 9.98"""
+        result = normalize_output_amount("9.980000 USDC", "10", "usdc")
+        assert abs(result - 9.98) < 0.001
+
+    def test_new_format_eth(self):
+        """New format: '0.499 ETH' → 0.499"""
+        result = normalize_output_amount("0.499 ETH", "0.5", "eth")
+        assert abs(result - 0.499) < 0.001
+
+    def test_new_format_usdt(self):
+        """New format: '99.5 USDT' → 99.5"""
+        result = normalize_output_amount("99.5 USDT", "100", "usdt")
+        assert abs(result - 99.5) < 0.001
+
+    def test_old_raw_format_usdc(self):
+        """Old raw format: '9980000' with input 10 → 9.98 (detected as raw because > input*1000)"""
+        result = normalize_output_amount("9980000", "10", "usdc")
+        assert abs(result - 9.98) < 0.001
+
+    def test_old_raw_format_eth(self):
+        """Old raw format: '499000000000000000' with input 0.5 → 0.499"""
+        result = normalize_output_amount("499000000000000000", "0.5", "eth")
+        assert abs(result - 0.499) < 0.001
+
+    def test_plain_number(self):
+        """Plain number: '9.98' → 9.98 (not raw, below input*1000 threshold)"""
+        result = normalize_output_amount("9.98", "10", "usdc")
+        assert abs(result - 9.98) < 0.001
+
+    def test_zero_output(self):
+        """Zero output → 0.0"""
+        result = normalize_output_amount("0", "10", "usdc")
+        assert result == 0.0
+
+    def test_empty_string(self):
+        """Empty string → 0.0"""
+        result = normalize_output_amount("", "10", "usdc")
+        assert result == 0.0
+
+
+# ── raw amount / human amount compatibility ────────────────────────
+
+class TestRawHumanCompat:
+    """Verify raw_to_amount and amount_to_raw are inverse operations."""
+
+    def test_raw_to_amount_usdc(self):
+        """9980000 raw USDC (6 decimals) → 9.98"""
+        assert abs(raw_to_amount("9980000", "usdc") - 9.98) < 0.0001
+
+    def test_raw_to_amount_eth(self):
+        """1e18 raw ETH (18 decimals) → 1.0"""
+        assert abs(raw_to_amount("1000000000000000000", "eth") - 1.0) < 0.0001
+
+    def test_raw_to_amount_usdt(self):
+        """5000000 raw USDT (6 decimals) → 5.0"""
+        assert abs(raw_to_amount("5000000", "usdt") - 5.0) < 0.0001
+
+    def test_roundtrip_usdc(self):
+        """amount_to_raw → raw_to_amount should recover original."""
         raw = amount_to_raw("10", "usdc")
         human = raw_to_amount(raw, "usdc")
         assert abs(human - 10.0) < 0.0001
 
-    def test_eth_roundtrip(self):
+    def test_roundtrip_eth(self):
+        """amount_to_raw → raw_to_amount should recover original."""
         raw = amount_to_raw("0.5", "eth")
         human = raw_to_amount(raw, "eth")
         assert abs(human - 0.5) < 0.0001
+
+    def test_small_amount_usdc(self):
+        """0.001 USDC → raw → back should be exact."""
+        raw = amount_to_raw("0.001", "usdc")
+        assert raw == "1000"
+        assert abs(raw_to_amount(raw, "usdc") - 0.001) < 0.00001
