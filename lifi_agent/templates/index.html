@@ -83,6 +83,7 @@
   .trace-name{font-size:13px;font-weight:600;color:var(--text);margin-bottom:2px}
   .trace-detail{font-size:12px;color:var(--text2);line-height:1.4}
   .trace-time{font-size:11px;color:var(--text3);font-variant-numeric:tabular-nums;white-space:nowrap;margin-top:1px}
+  .trace-tool{font-size:10px;color:var(--text3);font-weight:400;background:var(--surface);padding:1px 6px;border-radius:8px;margin-left:6px}
 
   /* Verdict Banner */
   .verdict{margin-top:20px;padding:16px 20px;border-radius:var(--r-sm);display:flex;align-items:center;gap:14px;animation:fadeSlideIn .4s ease}
@@ -374,7 +375,9 @@ function renderTrace(steps,verdict,reason,durationMs){
     html+='<div class="trace-step" style="animation-delay:'+delay+'s">';
     html+='<div class="trace-icon '+iconClass+'">'+icon+'</div>';
     html+='<div class="trace-body">';
-    html+='<div class="trace-name">'+escapeHtml(step.name)+'</div>';
+    html+='<div class="trace-name">'+escapeHtml(step.name);
+    if(step.mcp_tool){html+=' <span class="trace-tool">'+escapeHtml(step.mcp_tool)+'</span>';}
+    html+='</div>';
     html+='<div class="trace-detail">'+escapeHtml(step.detail)+'</div>';
     html+='</div>';
     html+='<div class="trace-time">'+step.duration_ms+'ms</div>';
