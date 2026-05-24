@@ -346,8 +346,17 @@ function setPreset(btn,value){
   btn.classList.add('active');
 }
 
-function buildIntentText(intent){
+function buildIntentText(intent, policy){
   var t='send '+intent.amount+' '+intent.token+' from '+intent.from_chain+' to '+intent.to_chain;
+  if(policy){
+    var parts=[];
+    if(policy.max_fee_pct!=null)parts.push('fee < '+policy.max_fee_pct+'%');
+    if(policy.min_output_amount!=null)parts.push('output >= '+policy.min_output_amount);
+    if(policy.require_healthy_route)parts.push('route is healthy');
+    if(policy.avoid_chains&&policy.avoid_chains.length)parts.push('avoid '+policy.avoid_chains.join(', '));
+    if(policy.prefer_cheapest)parts.push('prefer cheapest route');
+    if(parts.length)t+=' only if '+parts.join(' and ');
+  }
   return t;
 }
 
@@ -375,7 +384,7 @@ async function loadPresets(){
       groups[cat].forEach(function(p){
         var cls=p.expected_verdict==='EXECUTABLE'?'safe':'refuse';
         var icon=p.expected_verdict==='EXECUTABLE'?'🟢':'🔴';
-        var intentText=buildIntentText(p.intent);
+        var intentText=buildIntentText(p.intent, p.policy);
         html+='<button class="preset-btn '+cls+'" onclick="setPreset(this,\''+intentText.replace(/'/g,"\\'")+'\')" title="'+escapeHtml(p.description)+'">'+icon+' '+escapeHtml(p.name)+'</button>';
       });
     });
@@ -565,7 +574,6 @@ fetch('/api/status').then(function(r){return r.json()}).then(function(d){
   document.getElementById('modeDot').className='mode-dot '+(colors[mode]||'amber');
   document.getElementById('modeLabel').textContent=labels[mode]||mode;
   document.getElementById('modeEndpoint').textContent=d.endpoint||'';
-}
 }).catch(function(){});
 
 // Store last trace for copy

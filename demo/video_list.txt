@@ -1,0 +1,15 @@
+file '01_main_page.png'
+duration 3
+file '02_presets_loaded.png'
+duration 3
+file '03_analysis_results.png'
+duration 5
+file '04_judge_mode.png'
+duration 5
+file '05_preset_report.png'
+duration 5
+file '06_mcp_proof_collapsed.png'
+duration 3
+file '07_mcp_proof_expanded.png'
+duration 5
+file '07_mcp_proof_expanded.png'
