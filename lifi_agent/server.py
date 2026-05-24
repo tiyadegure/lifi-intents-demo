@@ -325,12 +325,12 @@ PRESETS = {
         "category": "success",
         "expected_verdict": "EXECUTABLE",
     },
-    "health-check": {
-        "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
+"health-check": {
+        "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "***", "amount": "10"},
         "policy": {"require_healthy_route": True},
         "description": "Route health enforcement — refuses if solvers report unhealthy.",
         "category": "success",
-        "expected_verdict": "EXECUTABLE",
+        "expected_verdict": "REFUSED",
     },
     "avoid-chain": {
         "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
