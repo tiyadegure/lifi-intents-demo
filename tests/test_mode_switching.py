@@ -250,8 +250,10 @@ class TestDoctorStrictMode:
             agent.mcp = MCPClient(url="http://localhost:1", timeout=2)
             report = agent.doctor()
 
-            # Connection group: MCP endpoint reachable should fail
-            conn_group = report["groups"][0]
+            # Mode group is first (index 0), Connection is second (index 1)
+            mode_group = report["groups"][0]
+            assert mode_group["name"] == "Mode"
+            conn_group = report["groups"][1]
             assert conn_group["name"] == "Connection"
             mcp_check = conn_group["checks"][0]
             assert mcp_check["name"] == "MCP endpoint reachable"

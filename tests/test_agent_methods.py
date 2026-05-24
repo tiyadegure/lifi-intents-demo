@@ -224,6 +224,7 @@ class TestDoctor:
         """doctor() includes expected group names."""
         report = agent.doctor()
         names = [g["name"] for g in report["groups"]]
+        assert "Mode" in names
         assert "Connection" in names
         assert "Protocol" in names
         assert "Routes" in names
@@ -234,9 +235,11 @@ class TestDoctor:
         report = agent.doctor()
         all_checks = [c for g in report["groups"] for c in g["checks"]]
         names = [c["name"] for c in all_checks]
+        assert "Current Mode" in names
+        assert "MCP Endpoint" in names
         assert "MCP endpoint reachable" in names
-        assert "request-quote works" in names
-        assert "Base USDC address configured" in names
+        assert "request-quote" in names
+        assert "Base USDC" in names
 
     def test_doctor_all_pass_in_demo(self, agent):
         """All checks pass in demo mode."""
@@ -244,6 +247,23 @@ class TestDoctor:
         for group in report["groups"]:
             for check in group["checks"]:
                 assert check["passed"] is True, f"Check '{check['name']}' failed: {check['detail']}"
+
+    def test_doctor_has_mode_field(self, agent):
+        """doctor() returns mode field."""
+        report = agent.doctor()
+        assert "mode" in report
+        assert report["mode"] in ("local_mcp", "mock_forced", "mock_fallback", "strict")
+
+    def test_doctor_has_endpoint_field(self, agent):
+        """doctor() returns endpoint field."""
+        report = agent.doctor()
+        assert "endpoint" in report
+
+    def test_doctor_has_next_action(self, agent):
+        """doctor() returns next_action field."""
+        report = agent.doctor()
+        assert "next_action" in report
+        assert len(report["next_action"]) > 0
 
     def test_doctor_warning_openai_key(self, agent):
         """OPENAI_API_KEY warning present when key not set."""

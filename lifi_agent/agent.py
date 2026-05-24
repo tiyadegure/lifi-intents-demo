@@ -923,80 +923,91 @@ class LifAgent:
     def doctor(self) -> dict:
         """Run diagnostic checks on the MCP connection and configuration.
 
-        Returns a diagnostic report with grouped checks and warnings.
-        Format: {groups: [{name: str, checks: [...]}], warnings: [...]}
+        Returns a developer diagnostic report with grouped checks, warnings, and next actions.
+        Format: {groups: [{name: str, checks: [...]}], warnings: [...], mode: str, endpoint: str, next_action: str}
         """
         groups = []
         warnings = []
-        mock_mode = False
-        strict_mode = False
+        failed_checks = []
+
+        # ── Group 0: Mode ─────────────────────────────────────────
+        mode_checks = []
+
+        # Connect first to determine actual mode
+        try:
+            info = self.mcp.connect()
+        except Exception:
+            info = {}
+
+        current_mode = self.mcp.mode
+        mock_source = self.mcp.mock_mode_source()
+
+        mode_checks.append({
+            "name": "Current Mode",
+            "passed": True,
+            "detail": current_mode
+        })
+        mode_checks.append({
+            "name": "MCP Endpoint",
+            "passed": True,
+            "detail": self.mcp.url
+        })
+        mode_checks.append({
+            "name": "Strict Mode",
+            "passed": not MCPClient.is_strict_mode(),
+            "detail": "enabled" if MCPClient.is_strict_mode() else "disabled"
+        })
+        if mock_source:
+            mode_checks.append({
+                "name": "Mock Source",
+                "passed": True,
+                "detail": mock_source
+            })
+
+        groups.append({"name": "Mode", "checks": mode_checks})
 
         # ── Group 1: Connection ───────────────────────────────────
         conn_checks = []
 
-        # MCP endpoint reachable — connect first, then check mode
-        try:
-            info = self.mcp.connect()
-            mock_mode = self.mcp.is_mock_mode()  # re-check after connect
-            strict_mode = MCPClient.is_strict_mode()
-
-            if mock_mode:
-                source = self.mcp.mock_mode_source()
-                if strict_mode:
-                    detail = f"Force mock mode ({source}) — strict mode violation!"
-                elif "LIFI_AGENT_MOCK_MODE" in source:
-                    detail = f"Force mock mode ({source})"
-                else:
-                    detail = f"Local MCP unreachable, auto-fallback to mock mode"
+        # MCP endpoint reachable
+        if self.mcp._connected:
+            if current_mode in ("mock_forced", "mock_fallback"):
+                detail = f"Mock mode active ({current_mode})"
             else:
-                detail = f"Connected to {info.get('serverInfo', {}).get('name', 'unknown')}"
+                server_name = info.get('serverInfo', {}).get('name', 'unknown')
+                detail = f"Connected to {server_name}"
             conn_checks.append({
                 "name": "MCP endpoint reachable",
                 "passed": True,
                 "detail": detail
             })
-        except Exception as e:
+        else:
             conn_checks.append({
                 "name": "MCP endpoint reachable",
                 "passed": False,
-                "detail": str(e)
+                "detail": "Connection failed"
             })
+            failed_checks.append("MCP endpoint unreachable")
 
-        # MCP session initialized
-        try:
-            session_id = self.mcp.session_id
-            if session_id is not None:
-                conn_checks.append({
-                    "name": "MCP session initialized",
-                    "passed": True,
-                    "detail": f"Session ID: {session_id[:8]}..."
-                })
-            elif self.mcp._connected:
-                conn_checks.append({
-                    "name": "MCP session initialized",
-                    "passed": True,
-                    "detail": "Stateless mode (no session ID)"
-                })
-            else:
-                conn_checks.append({
-                    "name": "MCP session initialized",
-                    "passed": False,
-                    "detail": "Not connected and no session ID"
-                })
-        except Exception as e:
+        # Session info
+        session_id = self.mcp.session_id
+        if session_id is not None:
             conn_checks.append({
-                "name": "MCP session initialized",
-                "passed": False,
-                "detail": str(e)
-            })
-
-        # Mock Mode Source (only when mock mode is active)
-        if mock_mode:
-            source = self.mcp.mock_mode_source()
-            conn_checks.append({
-                "name": "Mock Mode Source",
+                "name": "Session",
                 "passed": True,
-                "detail": source
+                "detail": f"Session ID: {session_id[:8]}..." if len(session_id) > 8 else f"Session ID: {session_id}"
+            })
+        elif self.mcp._connected:
+            conn_checks.append({
+                "name": "Session",
+                "passed": True,
+                "detail": "Stateless mode (no session ID)"
+            })
+        else:
+            conn_checks.append({
+                "name": "Session",
+                "passed": False,
+                "detail": "Not connected"
             })
 
         groups.append({"name": "Connection", "checks": conn_checks})
@@ -1004,15 +1015,22 @@ class LifAgent:
         # ── Group 2: Protocol ─────────────────────────────────────
         proto_checks = []
 
-        # MCP Protocol version
-        try:
-            if mock_mode:
-                proto_checks.append({
-                    "name": "MCP Protocol",
-                    "passed": True,
-                    "detail": "Skipped (mock mode)"
-                })
-            else:
+        if current_mode in ("mock_forced", "mock_fallback"):
+            proto_checks.append({
+                "name": "MCP Protocol",
+                "passed": True,
+                "detail": "Skipped (mock mode)"
+            })
+            tools = ["get-supported-routes", "request-quote", "check-route-health",
+                     "prepare-order", "track-order", "list-orders", "get-solver-identities",
+                     "get-quote-inventory", "submit-standing-quotes"]
+            proto_checks.append({
+                "name": "Tools Available",
+                "passed": True,
+                "detail": f"{len(tools)} tools (mock): {', '.join(tools[:5])}..."
+            })
+        else:
+            try:
                 protocol_version = "2025-03-26"
                 init_result = self.mcp.client.post(
                     self.mcp.url,
@@ -1024,11 +1042,11 @@ class LifAgent:
                 )
                 if init_result.status_code == 200:
                     server_info = MCPClient._parse_server_info(init_result.text)
-                    info = server_info.get("serverInfo", {})
+                    srv = server_info.get("serverInfo", {})
                     proto_checks.append({
                         "name": "MCP Protocol",
                         "passed": True,
-                        "detail": f"Protocol {protocol_version}, server: {info.get('name', '?')} v{info.get('version', '?')}"
+                        "detail": f"Protocol {protocol_version}, server: {srv.get('name', '?')} v{srv.get('version', '?')}"
                     })
                 else:
                     proto_checks.append({
@@ -1036,25 +1054,16 @@ class LifAgent:
                         "passed": False,
                         "detail": f"HTTP {init_result.status_code}"
                     })
-        except Exception as e:
-            proto_checks.append({
-                "name": "MCP Protocol",
-                "passed": False,
-                "detail": str(e)
-            })
-
-        # Available Tools
-        try:
-            if mock_mode:
-                tools = ["get-supported-routes", "request-quote", "check-route-health",
-                         "prepare-order", "track-order", "list-orders", "get-solver-identities",
-                         "get-quote-inventory", "submit-standing-quotes"]
+                    failed_checks.append(f"MCP protocol error: HTTP {init_result.status_code}")
+            except Exception as e:
                 proto_checks.append({
-                    "name": "Available Tools",
-                    "passed": True,
-                    "detail": f"{len(tools)} tools (mock): {', '.join(tools[:5])}..."
+                    "name": "MCP Protocol",
+                    "passed": False,
+                    "detail": str(e)
                 })
-            else:
+                failed_checks.append(f"MCP protocol: {e}")
+
+            try:
                 tools_result = self.mcp.client.post(
                     self.mcp.url,
                     json={"jsonrpc": "2.0", "id": 98, "method": "tools/list", "params": {}},
@@ -1067,122 +1076,105 @@ class LifAgent:
                         tool_list = parsed.get("tools", [])
                         tool_names = [t.get("name", "?") for t in tool_list]
                         proto_checks.append({
-                            "name": "Available Tools",
+                            "name": "Tools Available",
                             "passed": True,
                             "detail": f"{len(tool_names)} tools: {', '.join(tool_names[:5])}{'...' if len(tool_names) > 5 else ''}"
                         })
                     else:
                         proto_checks.append({
-                            "name": "Available Tools",
+                            "name": "Tools Available",
                             "passed": True,
-                            "detail": "Tools list returned (parsed as non-standard format)"
+                            "detail": "Tools list returned (non-standard format)"
                         })
                 else:
                     proto_checks.append({
-                        "name": "Available Tools",
+                        "name": "Tools Available",
                         "passed": False,
                         "detail": f"HTTP {tools_result.status_code}"
                     })
-        except Exception as e:
-            proto_checks.append({
-                "name": "Available Tools",
-                "passed": False,
-                "detail": str(e)
-            })
+                    failed_checks.append("tools/list unavailable")
+            except Exception as e:
+                proto_checks.append({
+                    "name": "Tools Available",
+                    "passed": False,
+                    "detail": str(e)
+                })
+                failed_checks.append(f"tools/list: {e}")
 
         groups.append({"name": "Protocol", "checks": proto_checks})
 
         # ── Group 3: Routes ───────────────────────────────────────
         route_checks = []
 
-        # get-supported-routes works
         try:
             routes_result = self.get_routes()
             route_count = len(routes_result.get("data", {}).get("routes", []))
             route_checks.append({
-                "name": "get-supported-routes works",
+                "name": "get-supported-routes",
                 "passed": True,
                 "detail": f"{route_count} routes available"
             })
         except Exception as e:
             route_checks.append({
-                "name": "get-supported-routes works",
+                "name": "get-supported-routes",
                 "passed": False,
                 "detail": str(e)
             })
+            failed_checks.append(f"routes: {e}")
 
-        # Base USDC address configured
         base_usdc = TOKENS.get("usdc", {}).get("8453", "")
-        if base_usdc:
-            route_checks.append({
-                "name": "Base USDC address configured",
-                "passed": True,
-                "detail": base_usdc[:10] + "..."
-            })
-        else:
-            route_checks.append({
-                "name": "Base USDC address configured",
-                "passed": False,
-                "detail": "Not configured"
-            })
+        route_checks.append({
+            "name": "Base USDC",
+            "passed": bool(base_usdc),
+            "detail": base_usdc[:10] + "..." if base_usdc else "Not configured"
+        })
 
-        # Arbitrum USDC address configured
         arb_usdc = TOKENS.get("usdc", {}).get("42161", "")
-        if arb_usdc:
-            route_checks.append({
-                "name": "Arbitrum USDC address configured",
-                "passed": True,
-                "detail": arb_usdc[:10] + "..."
-            })
-        else:
-            route_checks.append({
-                "name": "Arbitrum USDC address configured",
-                "passed": False,
-                "detail": "Not configured"
-            })
+        route_checks.append({
+            "name": "Arbitrum USDC",
+            "passed": bool(arb_usdc),
+            "detail": arb_usdc[:10] + "..." if arb_usdc else "Not configured"
+        })
 
         groups.append({"name": "Routes", "checks": route_checks})
 
         # ── Group 4: Quotes ───────────────────────────────────────
         quote_checks = []
 
-        # request-quote works
         try:
             quote_result = self.get_quote(Intent("base", "arbitrum", "usdc", "1"))
             if "error" not in quote_result:
                 quotes = quote_result.get("data", {}).get("quotes", [])
                 if quotes:
                     q = quotes[0]
-                    detail = f"Quote received — input: {q.get('inputAmount', '?')}, output: {q.get('outputAmount', '?')}, id: {q.get('quoteId', '?')[:16]}..."
+                    detail = f"Output: {q.get('outputAmount', '?')}, ID: {q.get('quoteId', '?')[:16]}..."
                 else:
                     detail = "Quote received but no quotes in response"
                 quote_checks.append({
-                    "name": "request-quote works",
+                    "name": "request-quote",
                     "passed": True,
                     "detail": detail
                 })
             else:
                 quote_checks.append({
-                    "name": "request-quote works",
+                    "name": "request-quote",
                     "passed": False,
                     "detail": quote_result.get("error", "Unknown error")
                 })
+                failed_checks.append("request-quote failed")
         except Exception as e:
             quote_checks.append({
-                "name": "request-quote works",
+                "name": "request-quote",
                 "passed": False,
                 "detail": str(e)
             })
+            failed_checks.append(f"request-quote: {e}")
 
-        # Quote Test (actual solver response)
         try:
             quote_args = {
-                "fromChain": "base",
-                "toChain": "arbitrum",
-                "fromToken": "USDC",
-                "toToken": "USDC",
-                "amount": "1",
-                "userAddress": DEMO_ADDRESS,
+                "fromChain": "base", "toChain": "arbitrum",
+                "fromToken": "USDC", "toToken": "USDC",
+                "amount": "1", "userAddress": DEMO_ADDRESS,
             }
             result = self.mcp.call("request-quote", quote_args)
             if "error" not in result:
@@ -1190,28 +1182,31 @@ class LifAgent:
                 if quotes:
                     q = quotes[0]
                     quote_checks.append({
-                        "name": "Quote Test",
+                        "name": "Solver Response",
                         "passed": True,
-                        "detail": f"1 USDC Base→Arbitrum: output {q.get('outputAmount', '?')}, solver responded"
+                        "detail": f"1 USDC Base→Arbitrum: {q.get('outputAmount', '?')}"
                     })
                 else:
                     quote_checks.append({
-                        "name": "Quote Test",
+                        "name": "Solver Response",
                         "passed": False,
-                        "detail": "No quotes returned for 1 USDC Base→Arbitrum"
+                        "detail": "No quotes for 1 USDC Base→Arbitrum"
                     })
+                    failed_checks.append("solver returned no quotes")
             else:
                 quote_checks.append({
-                    "name": "Quote Test",
+                    "name": "Solver Response",
                     "passed": False,
                     "detail": result.get("error", "Unknown error")
                 })
+                failed_checks.append("solver error")
         except Exception as e:
             quote_checks.append({
-                "name": "Quote Test",
+                "name": "Solver Response",
                 "passed": False,
                 "detail": str(e)
             })
+            failed_checks.append(f"solver: {e}")
 
         groups.append({"name": "Quotes", "checks": quote_checks})
 
@@ -1219,15 +1214,35 @@ class LifAgent:
         if not os.environ.get("OPENAI_API_KEY"):
             warnings.append({
                 "name": "OPENAI_API_KEY not set",
-                "detail": "Using deterministic parser"
+                "detail": "Using deterministic parser (no LLM fallback)"
             })
 
-        warnings.append({
-            "name": "Amount unit behavior",
-            "detail": "Should be verified before real execution"
-        })
+        if current_mode == "mock_fallback":
+            warnings.append({
+                "name": "Mock fallback active",
+                "detail": f"Local MCP at {self.mcp.url} was unreachable. Using simulated data."
+            })
 
-        return {"groups": groups, "warnings": warnings}
+        # ── Next Action ───────────────────────────────────────────
+        if failed_checks:
+            if "MCP endpoint unreachable" in failed_checks:
+                next_action = f"Start the local MCP server at {self.mcp.url}, or set LIFI_AGENT_MOCK_MODE=1 for demo mode"
+            elif "solver returned no quotes" in failed_checks:
+                next_action = "Solvers may be temporarily offline. Wait a few minutes and retry, or use mock mode"
+            else:
+                next_action = f"Fix: {failed_checks[0]}. Then retry: python -m lifi_agent doctor"
+        elif current_mode in ("mock_forced", "mock_fallback"):
+            next_action = "Running in mock mode. For real data: start local MCP server and unset LIFI_AGENT_MOCK_MODE"
+        else:
+            next_action = 'All checks passed. Try: python -m lifi_agent "send 10 USDC from Base to Arbitrum"'
+
+        return {
+            "groups": groups,
+            "warnings": warnings,
+            "mode": current_mode,
+            "endpoint": self.mcp.url,
+            "next_action": next_action,
+        }
 
     def close(self):
         self.mcp.close()
@@ -1439,6 +1454,13 @@ def interactive():
                 progress.add_task("doctor", total=None)
                 report = agent.doctor()
             
+            # Display mode info
+            mode = report.get("mode", "unknown")
+            endpoint = report.get("endpoint", "unknown")
+            mode_color = {"local_mcp": "green", "mock_forced": "yellow", "mock_fallback": "yellow", "strict": "red"}.get(mode, "white")
+            console.print(f"  Mode: [{mode_color}]{mode}[/{mode_color}]  Endpoint: {endpoint}")
+            console.print()
+            
             # Display grouped checks
             for group in report["groups"]:
                 console.print(f"  [bold]{group['name']}[/bold]")
@@ -1452,7 +1474,12 @@ def interactive():
                 console.print(f"  [bold yellow]Warnings:[/bold yellow]")
                 for warning in report["warnings"]:
                     console.print(f"  [yellow]![/yellow] {warning['name']}: {warning['detail']}")
+                console.print()
 
+            # Display next action
+            next_action = report.get("next_action", "")
+            if next_action:
+                console.print(f"  [bold cyan]Next:[/bold cyan] {next_action}")
             console.print()
             continue
 
