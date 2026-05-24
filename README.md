@@ -155,6 +155,50 @@ PITFALLS.md         # 10 LI.FI Intents MCP pitfalls I hit while building this
 
 ---
 
+## Architecture
+
+```
+Natural Language Input
+  "send 10 USDC from Base to Arbitrum if fee < 0.5%"
+          │
+          ▼
+┌─────────────────────┐
+│   Intent Parser     │  extract: amount, token, chains
+│   Policy Parser     │  extract: fee limit, avoid, health, min output
+└─────────┬───────────┘
+          │
+          ▼
+┌─────────────────────┐
+│   Route Validation  │  MCP: get-supported-routes
+│   Route Health      │  MCP: check-route-health (if required)
+└─────────┬───────────┘
+          │
+          ▼
+┌─────────────────────┐
+│   Get Quote         │  MCP: request-quote → solver response
+│   Calculate Fee     │  compare input vs output amount
+└─────────┬───────────┘
+          │
+          ▼
+┌─────────────────────┐
+│   Policy Engine     │  check each constraint against quote
+│   fee < limit?      │
+│   output >= min?    │
+│   chain not avoided?│
+│   route healthy?    │
+└─────────┬───────────┘
+          │
+          ▼
+┌─────────────────────┐
+│   Decision Trace    │  step-by-step log with timing
+│   Verdict           │  EXECUTABLE or REFUSED + reason
+└─────────────────────┘
+```
+
+Three modes: `local_mcp` (real solver) → `mock_fallback` (auto) → `mock_forced` (env var).
+
+---
+
 ## Testing
 
 ```bash

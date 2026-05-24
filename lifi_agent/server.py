@@ -28,6 +28,14 @@ def _escape_html(value: str) -> str:
     return html_mod.escape(str(value), quote=True)
 
 
+def _error_response(code: str, message: str, status_code: int = 400, next_action: str = ""):
+    """Return a unified error JSON response."""
+    body = {"error": True, "code": code, "message": message}
+    if next_action:
+        body["next_action"] = next_action
+    return JSONResponse(body, status_code=status_code)
+
+
 def trace_step(tool: str, args: dict, result: dict, duration_ms: int):
     """Record an agent reasoning step."""
     step = {
@@ -101,21 +109,29 @@ async def get_status():
     }
 
 
+@app.get("/api/doctor")
+async def doctor():
+    """Run diagnostic checks and return developer report."""
+    await asyncio.to_thread(ensure_connected)
+    report = await asyncio.to_thread(agent.doctor)
+    return report
+
+
 @app.get("/api/quote")
 async def get_quote(from_chain: str, to_chain: str, token: str, amount: str):
     # Input validation
     valid_chains = {"ethereum", "base", "arbitrum", "optimism", "polygon", "bsc", "avalanche", "zksync", "linea", "scroll", "blast", "mantle", "sonic"}
     valid_tokens = {"usdc", "usdt", "eth", "weth"}
     if from_chain.lower() not in valid_chains:
-        return JSONResponse({"error": f"Invalid from_chain: {from_chain}"}, status_code=400)
+        return _error_response("INVALID_CHAIN", f"Invalid from_chain: {from_chain}", 400, "Valid chains: " + ", ".join(sorted(valid_chains)))
     if to_chain.lower() not in valid_chains:
-        return JSONResponse({"error": f"Invalid to_chain: {to_chain}"}, status_code=400)
+        return _error_response("INVALID_CHAIN", f"Invalid to_chain: {to_chain}", 400, "Valid chains: " + ", ".join(sorted(valid_chains)))
     if token.lower() not in valid_tokens:
-        return JSONResponse({"error": f"Invalid token: {token}"}, status_code=400)
+        return _error_response("INVALID_TOKEN", f"Invalid token: {token}", 400, "Valid tokens: " + ", ".join(sorted(valid_tokens)))
     try:
         float(amount)
     except ValueError:
-        return JSONResponse({"error": f"Invalid amount: {amount}"}, status_code=400)
+        return _error_response("INVALID_AMOUNT", f"Invalid amount: {amount}", 400, "Amount must be a number")
 
     await asyncio.to_thread(ensure_connected)
     start = time.time()
@@ -125,7 +141,7 @@ async def get_quote(from_chain: str, to_chain: str, token: str, amount: str):
         )
         result = await asyncio.to_thread(agent.get_quote, intent)
     except ValueError as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
+        return _error_response("QUOTE_ERROR", str(e), 400)
     duration = int((time.time() - start) * 1000)
     trace_step("request-quote", {
         "from": from_chain, "to": to_chain, "token": token, "amount": amount
@@ -143,7 +159,7 @@ async def compare_quotes(from_chain: str, token: str, amount: str):
         )
         results = await asyncio.to_thread(agent.compare_quotes, intent)
     except ValueError as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
+        return _error_response("COMPARE_ERROR", str(e), 400)
     duration = int((time.time() - start) * 1000)
     trace_step("compare-quotes", {
         "from": from_chain, "token": token, "amount": amount
@@ -298,60 +314,70 @@ PRESETS = {
         "policy": {"max_fee_pct": 0.5, "require_healthy_route": False},
         "description": "Standard Base → Arbitrum USDC transfer with a 0.5% fee cap.",
         "category": "success",
+        "expected_verdict": "EXECUTABLE",
     },
     "fee-check": {
         "intent": {"from_chain": "ethereum", "to_chain": "base", "token": "USDC", "amount": "100"},
         "policy": {"max_fee_pct": 0.3},
         "description": "Ethereum → Base transfer with strict 0.3% fee limit to test fee policy enforcement.",
         "category": "success",
+        "expected_verdict": "EXECUTABLE",
     },
     "health-check": {
         "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
         "policy": {"require_healthy_route": True},
         "description": "Route health enforcement — refuses if solvers report unhealthy.",
         "category": "success",
+        "expected_verdict": "EXECUTABLE",
     },
     "avoid-chain": {
         "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
         "policy": {"avoid_chains": ["arbitrum"], "max_fee_pct": 1.0},
         "description": "Sends to Arbitrum but policy avoids Arbitrum — should be REFUSED.",
         "category": "failure",
+        "expected_verdict": "REFUSED",
     },
     "cheapest-route": {
         "intent": {"from_chain": "ethereum", "to_chain": "arbitrum", "token": "USDC", "amount": "50"},
         "policy": {"prefer_cheapest": True, "max_fee_pct": 1.0},
         "description": "Prefers the cheapest route across chains with a 1% fee ceiling.",
         "category": "success",
+        "expected_verdict": "EXECUTABLE",
     },
     "no-quote": {
         "intent": {"from_chain": "base", "to_chain": "zksync", "token": "USDC", "amount": "5"},
         "policy": {"require_quote": True, "max_fee_pct": 0.5},
         "description": "Tests an unusual chain pair — expected to fail gracefully with no-quote handling.",
         "category": "failure",
+        "expected_verdict": "REFUSED",
     },
     "strict-fee-check": {
         "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
         "policy": {"max_fee_pct": 0.1},
         "description": "Fee limit set to 0.1% — likely to fail since solver fees are typically ~0.2%.",
         "category": "failure",
+        "expected_verdict": "REFUSED",
     },
     "fee-too-high": {
         "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
         "policy": {"max_fee_pct": 0.01},
         "description": "Fee limit set to 0.01% — demo fee is ~0.20%, so this is always REFUSED.",
         "category": "failure",
+        "expected_verdict": "REFUSED",
     },
     "min-output": {
         "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
         "policy": {"min_output_amount": 9.99},
         "description": "Requires minimum output of 9.99 USDC — demo returns ~9.98, edge-case REFUSED.",
         "category": "edge-case",
+        "expected_verdict": "REFUSED",
     },
     "multi-constraint": {
         "intent": {"from_chain": "base", "to_chain": "arbitrum", "token": "USDC", "amount": "10"},
         "policy": {"max_fee_pct": 0.5, "avoid_chains": ["ethereum", "polygon"], "min_output_amount": 9.99},
         "description": "Combines fee cap, avoid chains, and minimum output 9.99 — tests multiple policy checks at once.",
         "category": "edge-case",
+        "expected_verdict": "REFUSED",
     },
 }
 
@@ -361,7 +387,7 @@ async def list_presets():
     """List all available demo presets."""
     return {
         "presets": [
-            {"name": name, "description": p["description"], "intent": p["intent"], "policy": p["policy"], "category": p.get("category", "success")}
+            {"name": name, "description": p["description"], "intent": p["intent"], "policy": p["policy"], "category": p.get("category", "success"), "expected_verdict": p.get("expected_verdict", "EXECUTABLE")}
             for name, p in PRESETS.items()
         ]
     }
@@ -373,7 +399,7 @@ async def get_preset(name: str):
     preset = PRESETS.get(name)
     if not preset:
         return JSONResponse(
-            {"error": f"Unknown preset: {name}", "available": list(PRESETS.keys())},
+            {"error": True, "code": "PRESET_NOT_FOUND", "message": f"Unknown preset: {name}", "next_action": list(PRESETS.keys())},
             status_code=404,
         )
     return preset
@@ -385,13 +411,13 @@ async def explain_intent(request: Request):
     body = await request.json()
     text = body.get("text", "").strip()
     if not text:
-        return JSONResponse({"error": "No intent text provided"}, status_code=400)
+        return _error_response("MISSING_INPUT", "No intent text provided", 400, "Provide intent in 'text' field")
     
     try:
         result = await asyncio.to_thread(agent.explain, text)
         return result
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
+        return _error_response("EXPLAIN_ERROR", str(e), 400)
 
 
 @app.post("/api/analyze-intent")
@@ -400,7 +426,7 @@ async def analyze_intent(request: Request):
     body = await request.json()
     text = body.get("text", "").strip()
     if not text:
-        return JSONResponse({"error": "No intent text provided"}, status_code=400)
+        return _error_response("MISSING_INPUT", "No intent text provided", 400, "Provide intent in 'text' field")
 
     await asyncio.to_thread(ensure_connected)
     start = time.time()
@@ -409,13 +435,13 @@ async def analyze_intent(request: Request):
     try:
         intent, policy = await asyncio.to_thread(parse_intent_with_policy, text)
     except Exception as e:
-        return JSONResponse({"error": f"Failed to parse intent: {e}"}, status_code=400)
+        return _error_response("PARSE_ERROR", f"Failed to parse intent: {e}", 400, "Format: 'send 10 USDC from Base to Arbitrum'")
 
     # Run safe verdict trace
     try:
         result = await asyncio.to_thread(agent.safe_verdict_trace, intent, policy)
     except Exception as e:
-        return JSONResponse({"error": f"Verdict failed: {e}"}, status_code=500)
+        return _error_response("VERDICT_ERROR", f"Verdict failed: {e}", 500, "Run 'doctor' to check MCP connectivity")
 
     duration = int((time.time() - start) * 1000)
     trace_step("analyze-intent", {"text": text}, {"verdict": result.verdict}, duration)
