@@ -151,7 +151,7 @@
     <h1>LI.FI Intents Developer Playground</h1>
     <p>Solver-aware technical demo — natural language → policy-driven cross-chain verdict</p>
     <div class="badge-row">
-      <span class="badge">MCP Protocol</span>
+      <span class="badge" id="modeBadge">MCP Protocol</span>
       <span class="badge">Safe Verdict</span>
       <span class="badge">Decision Trace</span>
       <span class="badge">Solver-Aware</span>
@@ -401,6 +401,17 @@ function renderTrace(steps,verdict,reason,durationMs){
 document.getElementById('intentInput').addEventListener('keydown',function(e){
   if(e.key==='Enter')analyzeIntent();
 });
+
+// Fetch mode on load
+fetch('/api/status').then(function(r){return r.json()}).then(function(d){
+  var badge=document.getElementById('modeBadge');
+  var mode=d.mode||'unknown';
+  var labels={local_mcp:'Local MCP',mock_forced:'Mock Mode',mock_fallback:'Mock Fallback',strict:'Strict Mode'};
+  badge.textContent=labels[mode]||mode;
+  if(mode==='local_mcp'){badge.style.borderColor='var(--green-border)';badge.style.color='var(--green)'}
+  else if(mode==='strict'){badge.style.borderColor='var(--red-border)';badge.style.color='var(--red)'}
+  else{badge.style.borderColor='var(--amber-border)';badge.style.color='var(--amber)'}
+}).catch(function(){});
 </script>
 </body>
 </html>
