@@ -1,5 +1,7 @@
 # LI.FI Intents Developer Playground
 
+[![Tests](https://github.com/tiyadegure/lifi-intents-demo/actions/workflows/test.yml/badge.svg)](https://github.com/tiyadegure/lifi-intents-demo/actions/workflows/test.yml)
+
 A solver-aware technical demo for [LI.FI Intents MCP](https://docs.li.fi/lifi-intents/introduction).
 
 It turns natural language like:
@@ -196,8 +198,10 @@ This project is both a **working demo** and a **developer reference**:
 
 - **Live demo**: [lifi.degure.me](http://lifi.degure.me)
 - **GitHub**: [tiyadegure/lifi-intents-demo](https://github.com/tiyadegure/lifi-intents-demo)
+- **API docs**: [docs/API.md](docs/API.md) — endpoint schemas, input/output formats
+- **Failure modes**: [docs/FAILURE-MODES.md](docs/FAILURE-MODES.md) — diagnosis guide for common issues
+- **PITFALLS.md**: [10 pitfalls](PITFALLS.md) — lessons learned building this
 - **LI.FI Intents docs**: [docs.li.fi/lifi-intents](https://docs.li.fi/lifi-intents/introduction)
-- **PITFALLS.md**: [10 pitfalls](PITFALLS.md)
 
 ---
 
