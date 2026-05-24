@@ -19,6 +19,8 @@ into:
 
 **Live demo → [lifi.degure.me](http://lifi.degure.me)**
 
+**Docs:** [API Reference](docs/API.md) · [Failure Modes](docs/FAILURE-MODES.md) · [Pitfalls](PITFALLS.md)
+
 ---
 
 ## How it works
