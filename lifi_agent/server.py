@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 import asyncio
 import collections
+import dataclasses
 import html as html_mod
 import json
 import os
@@ -600,7 +601,8 @@ async def judge_mode():
             intent_data = preset["intent"]
             intent = Intent(intent_data["from_chain"], intent_data["to_chain"],
                             intent_data["token"], intent_data["amount"])
-            policy = Policy(**{k: v for k, v in preset["policy"].items() if hasattr(Policy, k)})
+            field_names = {f.name for f in dataclasses.fields(Policy)}
+            policy = Policy(**{k: v for k, v in preset["policy"].items() if k in field_names})
             result = await asyncio.to_thread(agent.safe_verdict_trace, intent, policy)
             actual = result.verdict
             expected = preset.get("expected_verdict", "EXECUTABLE")
@@ -640,7 +642,8 @@ async def preset_report():
             intent_data = preset["intent"]
             intent = Intent(intent_data["from_chain"], intent_data["to_chain"],
                             intent_data["token"], intent_data["amount"])
-            policy = Policy(**{k: v for k, v in preset["policy"].items() if hasattr(Policy, k)})
+            field_names = {f.name for f in dataclasses.fields(Policy)}
+            policy = Policy(**{k: v for k, v in preset["policy"].items() if k in field_names})
             result = await asyncio.to_thread(agent.safe_verdict_trace, intent, policy)
             actual = result.verdict
             expected = preset.get("expected_verdict", "EXECUTABLE")
