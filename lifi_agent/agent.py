@@ -16,7 +16,7 @@ from typing import Optional, List, Dict, Any
 from pathlib import Path
 from datetime import datetime
 
-from .mcp_client import MCPClient, _is_mock_forced
+from .mcp_client import MCPClient
 from .models import (
     CHAINS, CHAIN_ALIASES, TOKENS, TOKEN_DECIMALS, DEMO_ADDRESS,
     raw_to_amount, normalize_output_amount,
@@ -928,42 +928,26 @@ class LifAgent:
         """
         groups = []
         warnings = []
-        mock_mode = self.mcp.is_mock_mode()
-        strict_mode = MCPClient.is_strict_mode()
+        mock_mode = False
+        strict_mode = False
 
         # ── Group 1: Connection ───────────────────────────────────
         conn_checks = []
 
-        # Operating Mode
-        if mock_mode:
-            source = self.mcp.mock_mode_source()
-            detail = f"Mock mode active — source: {source}"
-            status = "MOCK"
-            if strict_mode:
-                status = "STRICT"
-                detail += " (strict mode violation!)"
-        elif strict_mode:
-            status = "STRICT"
-            detail = "Strict mode enabled — connected to local MCP, no fallback allowed"
-        else:
-            status = "LOCAL"
-            detail = "Connected to local MCP server"
-        conn_checks.append({
-            "name": "Operating Mode",
-            "status": status,
-            "passed": True,
-            "detail": detail
-        })
-
-        # MCP endpoint reachable
+        # MCP endpoint reachable — connect first, then check mode
         try:
             info = self.mcp.connect()
+            mock_mode = self.mcp.is_mock_mode()  # re-check after connect
+            strict_mode = MCPClient.is_strict_mode()
+
             if mock_mode:
-                forced = _is_mock_forced()
-                if forced:
-                    detail = "Force mock mode (LIFI_AGENT_MOCK_MODE=1)"
+                source = self.mcp.mock_mode_source()
+                if strict_mode:
+                    detail = f"Force mock mode ({source}) — strict mode violation!"
+                elif "LIFI_AGENT_MOCK_MODE" in source:
+                    detail = f"Force mock mode ({source})"
                 else:
-                    detail = "Local MCP unreachable, auto-fallback to mock mode"
+                    detail = f"Local MCP unreachable, auto-fallback to mock mode"
             else:
                 detail = f"Connected to {info.get('serverInfo', {}).get('name', 'unknown')}"
             conn_checks.append({

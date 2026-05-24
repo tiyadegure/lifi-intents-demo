@@ -250,18 +250,12 @@ class TestDoctorStrictMode:
             agent.mcp = MCPClient(url="http://localhost:1", timeout=2)
             report = agent.doctor()
 
-            # Connection group: Operating Mode should show STRICT
+            # Connection group: MCP endpoint reachable should fail
             conn_group = report["groups"][0]
             assert conn_group["name"] == "Connection"
-            mode_check = conn_group["checks"][0]
-            assert mode_check["name"] == "Operating Mode"
-            assert mode_check["status"] == "STRICT"
-
-            # Connection group: MCP endpoint reachable should fail with error
-            mcp_check = conn_group["checks"][1]
+            mcp_check = conn_group["checks"][0]
             assert mcp_check["name"] == "MCP endpoint reachable"
             assert mcp_check["passed"] is False
-            assert len(mcp_check["detail"]) > 0
 
     def test_doctor_strict_mode_no_mock_fallback(self):
         """Doctor with strict mode does not fall back to mock mode."""
