@@ -171,7 +171,6 @@ Reason: No solver coverage for Base→Tron. Policy violations detected.
 
 ### Prerequisites
 - Python 3.10+
-- Node.js 18+ (for Web UI)
 
 ### Install
 
@@ -220,7 +219,7 @@ lifi-intents-demo/
 │   └── templates/index.html # Web UI template
 ├── tests/                   # 366 tests (parser, policies, verdicts, API)
 ├── docs/                    # API reference, failure modes
-├── PITFALLS.md              # 10 real pitfalls building against LI.FI Intents
+├── examples/                # Usage examples (decision trace, doctor, presets)
 └── remotion/                # Demo video source (Remotion + React)
 ```
 
@@ -241,7 +240,6 @@ lifi-intents-demo/
 
 - [API Reference](docs/API.md) — All endpoints and response formats
 - [Failure Modes](docs/FAILURE-MODES.md) — How the system handles errors
-- [Pitfalls](PITFALLS.md) — 10 real pitfalls encountered building against LI.FI Intents MCP
 
 ---
 
