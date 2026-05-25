@@ -1,10 +1,49 @@
-node_modules/
-dist/
-.output/
-*.mp4
-# Allow Web UI screenshots for README
-!remotion/public/recordings/*.png
-.DS_Store
+     1|node_modules/
+     2|dist/
+     3|.output/
+     4|*.mp4
+     5|# Allow Web UI screenshots for README
+     6|!remotion/public/recordings/*.png
+     7|.DS_Store
+     8|
+     9|__pycache__/
+    10|.venv/
+    11|
 
-__pycache__/
-.venv/
+# Reference materials (not for submission)
+docs/ui-reference/
+recordings/
+
+# Demo temp files
+demo/frame*.png
+demo/0[0-9]_*.png
+demo/demo.gif
+demo/*_demo.py
+process-cast.py
+record-demo.sh
+
+# Remotion temp/test audio
+remotion/public/audio/test_mimo*
+remotion/public/audio/bgm/
+remotion/public/audio/sfx/
+remotion/public/audio/02_question.mp3
+remotion/public/audio/03_connecting.mp3
+remotion/public/audio/04_routes.mp3
+remotion/public/audio/05_quote.mp3
+remotion/public/audio/05_verdict_ok.ogg
+remotion/public/audio/06_explain.mp3
+remotion/public/audio/07_presets.mp3
+remotion/public/audio/07_mcp.mp3
+remotion/public/audio/08_arch.mp3
+remotion/public/audio/08_closing.mp3
+
+# Remotion temp recordings
+remotion/public/recordings/ui-mcp-proof-mock.png
+remotion/public/recordings/ui-mcp-proof-new.png
+remotion/public/recordings/ui-result-analyze.png
+remotion/public/recordings/webui-*.png
+remotion/public/recordings/demo.cast
+
+# Video output
+remotion/output/
+output/
