@@ -1,256 +1,168 @@
-# LI.FI Intents Developer Playground
+# LI.FI Intents × AI Agent — Safe Verdict Playground
 
-[![Tests](https://github.com/tiyadegure/lifi-intents-demo/actions/workflows/test.yml/badge.svg)](https://github.com/tiyadegure/lifi-intents-demo/actions/workflows/test.yml)
+> Policy-driven cross-chain decisions for AI Agents.
+> Turn natural language into EXECUTABLE or REFUSED verdicts with full decision traces.
 
-A solver-aware technical demo for [LI.FI Intents MCP](https://docs.li.fi/lifi-intents/introduction).
+**🔗 Live demo → [lifi.degure.me](https://lifi.degure.me)**
 
-It turns natural language like:
-
-> "send 10 USDC from Base to Arbitrum only if fee < 0.5%"
-
-into:
-
-1. **Structured intent** — amount, token, chains
-2. **Policy constraints** — max fee, min output, route health
-3. **LI.FI MCP quote request** — real-time solver quotes
-4. **Route health / solver checks** — availability, latency
-5. **Visible decision trace** — every step logged with timing
-6. **EXECUTABLE or REFUSED verdict** — policy-driven decision
-
-**Live demo → [lifi.degure.me](http://lifi.degure.me)**
-
-**Docs:** [API Reference](docs/API.md) · [Failure Modes](docs/FAILURE-MODES.md) · [Pitfalls](PITFALLS.md)
+Built for the [LI.FI Intents Mini Builder Challenge](https://lifi.notion.site/LI-FI-Intents-Mini-Builder-Challenge-366f0ff14ac78168a0cdd9f44a3c1f13).
 
 ---
 
-## How it works
+## What it does
+
+Type a natural language cross-chain intent with safety constraints:
 
 ```
-Natural language input
-  → Intent parser (regex or LLM)
-    → Policy extractor ("only if fee < 0.5%")
-      → MCP tool call (get-supported-routes, request-quote)
-        → Solver-aware checks (route health, quote availability)
-          → Safe Verdict (EXECUTABLE / REFUSED)
+send 0.001 WETH from Base to Arbitrum only if route is healthy and fee < 0.5%
 ```
 
-The parser uses a **deterministic regex engine** by default, with optional LLM fallback (OpenAI-compatible API). This means it works offline, with zero API keys, and produces consistent structured output every time.
+The system:
+
+1. **Parses** your intent into structured parameters (amount, token, chains)
+2. **Extracts policy** constraints (max fee, route health requirement)
+3. **Calls LI.FI MCP tools** (get-supported-routes, check-route-health, request-quote)
+4. **Runs a decision trace** — every check logged with timing and tool names
+5. **Returns a verdict**: ✅ EXECUTABLE or 🚫 REFUSED with reasoning
+
+---
+
+## Screenshots
+
+### Web Interface — Homepage
+![Homepage](remotion/public/recordings/ui-homepage.png)
+
+### Decision Trace — EXECUTABLE
+![Executable](remotion/public/recordings/ui-result-executable.png)
+
+### MCP Proof — Real Server Connection
+![MCP Proof](remotion/public/recordings/ui-mcp-proof.png)
 
 ---
 
 ## Features
 
-- **Safe Verdict** — policy-driven decision engine with EXECUTABLE / REFUSED output
-- **Decision Trace** — step-by-step audit log with MCP tool names and timing
-- **Solver-Aware Checks** — route health, quote availability, solver inventory
-- **Doctor** — `python -m lifi_agent doctor` to diagnose MCP connectivity
-- **CLI** — interactive terminal with tab completion, rich formatting
-- **Web UI** — three-column layout: Intent → Structured Output → Decision Trace
-- **PITFALLS.md** — 10 real pitfalls encountered building against LI.FI Intents MCP
-
----
-
-## Local MCP Server Setup
-
-The LI.FI Intents MCP server can run locally in stateless HTTP mode, which is more reliable than the hosted version (which has session management issues).
-
-### Three modes
-
-The CLI supports three modes and automatically selects the best one on startup:
-
-- **Primary: Local MCP Mode** — connects to the local MCP server at `localhost:3333/mcp` (configurable via `LIFI_MCP_URL`). Full solver quotes, real-time route health, and inventory checks.
-- **Fallback: Mock Mode** — if the local MCP server is not running, the CLI automatically falls back to mock data. Useful for testing the UI and Safe Verdict logic without an MCP server.
-- **Strict Mode** — forces real MCP only. If the server is unreachable, the CLI raises an error instead of falling back to mock. Use this when you need to guarantee real solver data.
-
-To force mock mode regardless of server availability:
-
-```bash
-export LIFI_AGENT_MOCK_MODE=1
-```
-
-To enable strict mode (no mock fallback):
-
-```bash
-export LIFI_AGENT_STRICT_MODE=1
-```
-
-> **Note:** Setting both `LIFI_AGENT_STRICT_MODE=1` and `LIFI_AGENT_MOCK_MODE=1` raises a conflict error.
-
-Run `python -m lifi_agent doctor` to see the current mode, endpoint, and diagnostics.
-
-### Setup
-
-```bash
-# Clone and build the MCP server
-git clone https://github.com/lifinance/lifi-intents-mcp
-cd lifi-intents-mcp
-npm install
-npm run build
-
-# Run in stateless HTTP mode
-PORT=3333 node dist/transport-http.js
-```
-
-The server starts at `http://localhost:3333/mcp`. This is already the default URL in this project (`LIFI_MCP_URL` env var).
-
-**Why run locally?** The hosted version uses session management that can cause "No valid session ID" errors. The local stateless mode avoids this entirely.
-
-**Note:** The solver network may be temporarily offline, causing all quotes to return empty. This is not a bug — it's a known transient state.
-
----
-
-## Quick start
-
-```bash
-git clone https://github.com/tiyadegure/lifi-intents-demo.git
-cd lifi-intents-demo
-
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
-
-# CLI
-python -m lifi_agent
-
-# Web UI
-python -m lifi_agent.server
-# → http://localhost:8888
-
-# Doctor
-python -m lifi_agent doctor
-```
-
----
-
-## CLI examples
-
-```
-# Safe Verdict (with decision trace)
-> safe send 10 USDC from Base to Arbitrum if fee < 0.5%
-
-# Solver-aware route check
-> solver base arbitrum USDC USDC
-
-# Compare quotes across chains
-> compare 50 USDC from Base
-
-# Route health
-> route health base arbitrum
-
-# Quote history
-> stats
-```
-
----
-
-## Project structure
-
-```
-lifi_agent/
-├── agent.py        # Intent parser, policy engine, safe verdict, doctor
-├── mcp_client.py   # LI.FI Intents MCP client (SSE transport)
-├── server.py       # Web UI (FastAPI + inline HTML)
-└── __main__.py     # CLI entry point
-
-PITFALLS.md         # 10 LI.FI Intents MCP pitfalls I hit while building this
-```
+| Feature | Description |
+|---------|-------------|
+| 🛡️ **Safe Verdict** | Policy-driven EXECUTABLE / REFUSED decisions |
+| 📊 **Decision Trace** | Step-by-step audit log with MCP tool names and timing |
+| 🔌 **MCP Integration** | Real connection to LI.FI Intents MCP server |
+| 🎯 **10 Policy Presets** | One-click testing: safe-transfer, fee-check, health-check, etc. |
+| 🌐 **Web UI** | Three-column layout: Intent → Structured Output → Decision Trace |
+| 💻 **CLI** | Interactive terminal with rich formatting |
+| 🔍 **MCP Proof** | Live server connection verification with route count and quote data |
+| 🧪 **366 Tests** | Full test coverage for parser, policies, verdicts, and API |
 
 ---
 
 ## Architecture
 
 ```
-Natural Language Input
-  "send 10 USDC from Base to Arbitrum if fee < 0.5%"
-          │
-          ▼
-┌─────────────────────┐
-│   Intent Parser     │  extract: amount, token, chains
-│   Policy Parser     │  extract: fee limit, avoid, health, min output
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│   Route Validation  │  MCP: get-supported-routes
-│   Route Health      │  MCP: check-route-health (if required)
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│   Get Quote         │  MCP: request-quote → solver response
-│   Calculate Fee     │  compare input vs output amount
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│   Policy Engine     │  check each constraint against quote
-│   fee < limit?      │
-│   output >= min?    │
-│   chain not avoided?│
-│   route healthy?    │
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│   Decision Trace    │  step-by-step log with timing
-│   Verdict           │  EXECUTABLE or REFUSED + reason
-└─────────────────────┘
+┌─────────────┐     ┌─────────────┐     ┌─────────────────┐     ┌──────────────┐
+│  User Goal  │ ──→ │  AI Agent   │ ──→ │   MCP Server    │ ──→ │   Solver     │
+│  (natural   │     │  (parse +   │     │  (LI.FI Intents │     │   Network    │
+│  language)  │     │   policy)   │     │   API)          │     │  (compete)   │
+└─────────────┘     └─────────────┘     └─────────────────┘     └──────────────┘
+                                                                       │
+                                                                       ↓
+                                                              ┌──────────────┐
+                                                              │ Safe Verdict │
+                                                              │ EXECUTABLE   │
+                                                              │ or REFUSED   │
+                                                              └──────────────┘
 ```
 
-Three modes: `local_mcp` (real solver) → `mock_fallback` (auto) → `mock_forced` (env var).
+### MCP Tools Used
+
+- `get-supported-routes` — Discover available cross-chain routes
+- `check-route-health` — Verify solver coverage and recent order activity
+- `request-quote` — Get real-time solver quotes
+- `prepare-order` — Build order structure for execution
+- `track-order` — Monitor order status
 
 ---
 
-## Testing
+## Quick Start
+
+### Prerequisites
+- Python 3.10+
+- Node.js 18+ (for Web UI)
+
+### Install
 
 ```bash
-# Install dev dependencies
-pip install -e ".[dev]"
-
-# Run all tests
-pytest
-
-# Run with verbose output
-pytest -v
-
-# Run a specific test file
-pytest tests/test_safe_verdict.py -v
-
-# Run a specific test class
-pytest tests/test_policy_parser.py::TestParsePolicyFee -v
+git clone https://github.com/tiyadegure/lifi-intents-demo.git
+cd lifi-intents-demo
+pip install -e .
 ```
 
-**Test coverage:**
-- `test_models.py` — amount parsing, normalize_output_amount, raw↔human conversion
-- `test_policy_parser.py` — fee, avoid, min output, healthy route, same-chain only
-- `test_safe_verdict.py` — EXECUTABLE, REFUSED (fee/output/avoid/cross-chain), decision trace
-- `test_mcp_client.py` — SSE parsing, mock mode, cache (mocked HTTP), rate limiting
-- `test_mode_property.py` — local_mcp, mock_forced, mock_fallback, strict mode
+### Run CLI
+
+```bash
+python -m lifi_agent
+# or
+lifi-agent
+```
+
+### Run Web UI
+
+```bash
+cd demo
+npm install
+npm run dev
+# Open http://localhost:8888
+```
+
+### Run Tests
+
+```bash
+pytest tests/ -v
+# 366 tests, all passing
+```
 
 ---
 
-## Why this matters
+## Project Structure
 
-LI.FI Intents MCP is a new protocol. Most developers will hit the same issues I did — SSE responses, session management, token address mapping, amount unit conversion.
-
-This project is both a **working demo** and a **developer reference**:
-- The code shows how to correctly integrate with LI.FI Intents MCP
-- PITFALLS.md documents the hard-won lessons
-- The Doctor tool helps others debug their own integrations
-
----
-
-## Links
-
-- **Live demo**: [lifi.degure.me](http://lifi.degure.me)
-- **GitHub**: [tiyadegure/lifi-intents-demo](https://github.com/tiyadegure/lifi-intents-demo)
-- **API docs**: [docs/API.md](docs/API.md) — endpoint schemas, input/output formats
-- **Failure modes**: [docs/FAILURE-MODES.md](docs/FAILURE-MODES.md) — diagnosis guide for common issues
-- **PITFALLS.md**: [10 pitfalls](PITFALLS.md) — lessons learned building this
-- **LI.FI Intents docs**: [docs.li.fi/lifi-intents](https://docs.li.fi/lifi-intents/introduction)
+```
+lifi-intents-demo/
+├── lifi_agent/          # Core Python package
+│   ├── parser.py        # Intent parser (regex + LLM fallback)
+│   ├── policy.py        # Policy engine (fee, health, chain constraints)
+│   ├── verdict.py       # Decision engine (EXECUTABLE / REFUSED)
+│   ├── mcp_client.py    # MCP server client
+│   └── cli.py           # Interactive CLI
+├── demo/                # Web UI (Next.js)
+├── tests/               # 366 tests
+├── docs/                # API reference, failure modes
+├── PITFALLS.md          # 10 real pitfalls building against LI.FI Intents
+└── remotion/            # Demo video source
+```
 
 ---
 
-Built for the [LI.FI Intents Mini Builder Challenge](https://lifi.notion.site/LI-FI-Intents-Mini-Builder-Challenge-366f0ff14ac78168a0cdd9f44a3c1f13).
+## Key Design Decisions
+
+1. **Deterministic parser by default** — regex engine, zero API keys, consistent output
+2. **Policy-first architecture** — constraints extracted before any MCP calls
+3. **Visible decision trace** — every step logged with tool name, timing, and result
+4. **Three-mode MCP** — Local MCP (default) → Mock Fallback → Mock Forced → Strict
+5. **No real wallet execution** — this is a decision engine, not a transaction executor
+
+---
+
+## Documentation
+
+- [API Reference](docs/API.md) — All endpoints and response formats
+- [Failure Modes](docs/FAILURE-MODES.md) — How the system handles errors
+- [Pitfalls](PITFALLS.md) — 10 real pitfalls encountered building against LI.FI Intents MCP
+
+---
+
+## License
 
 MIT
+
+---
+
+Built with ❤️ for the LI.FI Intents Builder Challenge

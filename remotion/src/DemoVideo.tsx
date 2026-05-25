@@ -6,190 +6,192 @@ import {
   interpolate,
   spring,
   staticFile,
+  Audio,
 } from "remotion";
+import {
+  Particles,
+  TypewriterText,
+  AnimatedProgress,
+  AnimatedCounter,
+  GlowText,
+} from "./components";
+import { AudioMix } from "./AudioMix";
 
-// ── Title Sequence ──
+// ── Title Sequence (with particles + spring) ──
 const TitleCard = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  const opacity = interpolate(frame, [0, 30], [0, 1], { extrapolateRight: "clamp" });
-  const y = spring({ frame, fps, config: { damping: 12 } });
+  const s = spring({ frame, fps, config: { damping: 12, stiffness: 150 } });
+  const scale = interpolate(s, [0, 1], [0.8, 1]);
+  const opacity = interpolate(frame, [0, 20], [0, 1], {
+    extrapolateRight: "clamp",
+  });
 
   return (
     <AbsoluteFill
       style={{
-        backgroundColor: "#0a0a0a",
+        backgroundColor: "#0d1117",
         justifyContent: "center",
         alignItems: "center",
       }}
     >
+      <Particles count={50} color="#4C64FF" speed={0.25} />
       <div
         style={{
           opacity,
-          transform: `translateY(${interpolate(y, [0, 1], [50, 0])}px)`,
+          transform: `scale(${scale})`,
           textAlign: "center",
         }}
       >
         <div
           style={{
-            fontSize: 72,
+            fontSize: 64,
             fontWeight: 800,
-            color: "#ffffff",
-            fontFamily: "Inter, system-ui, sans-serif",
+            fontFamily: "'JetBrains Mono', monospace",
             marginBottom: 16,
           }}
         >
-          LI.FI Intents × AI Agent
+          <GlowText color="#4C64FF" glowColor="#4C64FF">
+            🛡️ LI.FI Intents
+          </GlowText>
         </div>
-        <div
-          style={{
-            fontSize: 32,
-            color: "#888",
-            fontFamily: "Inter, system-ui, sans-serif",
-          }}
-        >
-          Cross-Chain via MCP — Powered by Hermes Agent
-        </div>
-      </div>
-    </AbsoluteFill>
-  );
-};
-
-// ── Caption Overlay ──
-const Caption = ({ text, startFrame, duration = 90 }) => {
-  const frame = useCurrentFrame();
-  const relFrame = frame - startFrame;
-
-  if (relFrame < 0 || relFrame > duration) return null;
-
-  const opacity = interpolate(
-    relFrame,
-    [0, 15, duration - 15, duration],
-    [0, 1, 1, 0],
-    { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
-  );
-
-  return (
-    <div
-      style={{
-        position: "absolute",
-        bottom: 80,
-        left: 0,
-        right: 0,
-        display: "flex",
-        justifyContent: "center",
-        opacity,
-      }}
-    >
-      <div
-        style={{
-          backgroundColor: "rgba(0, 0, 0, 0.85)",
-          borderRadius: 12,
-          padding: "16px 32px",
-          maxWidth: 1200,
-        }}
-      >
         <div
           style={{
             fontSize: 28,
-            color: "#ffffff",
-            fontFamily: "Inter, system-ui, sans-serif",
-            lineHeight: 1.5,
-            textAlign: "center",
+            color: "#8b949e",
+            fontFamily: "'JetBrains Mono', monospace",
           }}
         >
-          {text}
+          Developer Playground
         </div>
-      </div>
-    </div>
-  );
-};
-
-// ── Terminal Recording Placeholder ──
-const TerminalBackground = () => {
-  const frame = useCurrentFrame();
-
-  return (
-    <AbsoluteFill
-      style={{
-        backgroundColor: "#1a1a2e",
-        justifyContent: "center",
-        alignItems: "center",
-      }}
-    >
-      {/* Replace with actual terminal recording */}
-      <div
-        style={{
-          width: 1600,
-          height: 900,
-          backgroundColor: "#0d1117",
-          borderRadius: 16,
-          border: "2px solid #333",
-          overflow: "hidden",
-          padding: 32,
-          fontFamily: "JetBrains Mono, monospace",
-          fontSize: 22,
-          color: "#c9d1d9",
-          lineHeight: 1.6,
-        }}
-      >
-        <div style={{ color: "#58a6ff" }}>$ python3 mcp_demo.py</div>
-        <div style={{ marginTop: 16, color: "#7ee787" }}>
-          ════════════════════════════════════════
-        </div>
-        <div style={{ color: "#f0f6fc", fontWeight: 700, fontSize: 28 }}>
-          LI.FI Intents × AI Agent Demo
-        </div>
-        <div style={{ color: "#7ee787" }}>
-          ════════════════════════════════════════
-        </div>
-        <div style={{ marginTop: 24, color: "#79c0ff" }}>
-          🤖 Agent: Connecting to LI.FI Intents MCP Server...
-        </div>
-        <div style={{ marginTop: 8, color: "#d2a8ff" }}>
-          ⚡ Calling MCP Tool: initialize
-        </div>
-        <div style={{ color: "#7ee787" }}>✅ Connected!</div>
       </div>
     </AbsoluteFill>
   );
 };
 
-// ── Outro ──
-const OutroCard = () => {
+// ── Terminal Demo Scene (with typewriter) ──
+const TerminalDemo = () => {
   const frame = useCurrentFrame();
-  const opacity = interpolate(frame, [0, 30], [0, 1], { extrapolateRight: "clamp" });
+  const { fps } = useVideoConfig();
 
   return (
     <AbsoluteFill
       style={{
-        backgroundColor: "#0a0a0a",
+        backgroundColor: "#0d1117",
+        justifyContent: "center",
+        alignItems: "center",
+      }}
+    >
+      <div
+        style={{
+          width: 1500,
+          backgroundColor: "#161b22",
+          borderRadius: 16,
+          border: "1px solid #30363d",
+          overflow: "hidden",
+          padding: 32,
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: 20,
+          color: "#e6edf3",
+          lineHeight: 1.7,
+          boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+        }}
+      >
+        {/* Window dots */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          <div style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: "#ff5f56" }} />
+          <div style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: "#ffbd2e" }} />
+          <div style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: "#27c93f" }} />
+        </div>
+
+        {/* Typewriter content */}
+        <div style={{ color: "#8b949e" }}>
+          $ python3 -m lifi_agent
+        </div>
+        <div style={{ marginTop: 8, color: "#39d353", fontWeight: 600 }}>
+          ❯ send 0.001 WETH from Base to Arbitrum
+        </div>
+        <div style={{ marginTop: 16, color: "#bc8cff", fontWeight: 600 }}>
+          🤖 Agent:
+        </div>
+        <div style={{ color: "#8b949e", marginTop: 4 }}>
+          Analyzing intent...
+        </div>
+
+        {/* Progress bar — route analysis */}
+        <div style={{ marginTop: 20, width: "80%" }}>
+          <AnimatedProgress
+            from={0}
+            to={1}
+            durationFrames={90}
+            label="Route Analysis"
+            delay={30}
+            color="#4C64FF"
+          />
+        </div>
+
+        <div style={{ marginTop: 16, color: "#d29922", fontWeight: 600 }}>
+          ⚡ MCP → request-quote
+        </div>
+        <div style={{ marginTop: 8, color: "#3fb950", fontWeight: 600 }}>
+          ✅ Verdict: EXECUTABLE
+        </div>
+        <div style={{ color: "#8b949e", marginTop: 4 }}>
+          Output:{" "}
+          <AnimatedCounter
+            from={0}
+            to={2.481}
+            durationFrames={60}
+            suffix=" USDC"
+            decimals={3}
+            delay={100}
+            style={{ color: "#3fb950", fontWeight: 600 }}
+          />
+        </div>
+      </div>
+    </AbsoluteFill>
+  );
+};
+
+// ── Outro (with particles) ──
+const OutroCard = () => {
+  const frame = useCurrentFrame();
+  const opacity = interpolate(frame, [0, 30], [0, 1], {
+    extrapolateRight: "clamp",
+  });
+
+  return (
+    <AbsoluteFill
+      style={{
+        backgroundColor: "#0d1117",
         justifyContent: "center",
         alignItems: "center",
         opacity,
       }}
     >
+      <Particles count={60} color="#4C64FF" speed={0.3} />
       <div style={{ textAlign: "center" }}>
         <div
           style={{
-            fontSize: 64,
+            fontSize: 56,
             fontWeight: 800,
-            color: "#ffffff",
-            fontFamily: "Inter, system-ui, sans-serif",
+            fontFamily: "'JetBrains Mono', monospace",
             marginBottom: 24,
           }}
         >
-          AI Agents × Cross-Chain 🚀
+          <GlowText color="#4C64FF">
+            AI Agents × Cross-Chain 🚀
+          </GlowText>
         </div>
         <div
           style={{
-            fontSize: 28,
-            color: "#888",
-            fontFamily: "Inter, system-ui, sans-serif",
+            fontSize: 22,
+            color: "#8b949e",
+            fontFamily: "'JetBrains Mono', monospace",
           }}
         >
-          docs.li.fi/lifi-intents
+          docs.li.fi/lifi-intents · lifi.degure.me
         </div>
       </div>
     </AbsoluteFill>
@@ -200,6 +202,8 @@ const OutroCard = () => {
 export const DemoVideo: React.FC = () => {
   return (
     <AbsoluteFill>
+      <AudioMix />
+
       {/* Title: 0-3s */}
       <Sequence from={0} durationInFrames={90}>
         <TitleCard />
@@ -207,36 +211,11 @@ export const DemoVideo: React.FC = () => {
 
       {/* Terminal Demo: 3-50s */}
       <Sequence from={90} durationInFrames={1200}>
-        <TerminalBackground />
-        <Caption
-          text="AI Agent connects to LI.FI Intents via MCP Protocol"
-          startFrame={30}
-          duration={120}
-        />
-        <Caption
-          text="Requesting cross-chain quote: 10 USDC Base → Arbitrum"
-          startFrame={200}
-          duration={120}
-        />
-        <Caption
-          text="Solvers compete with standing quotes — best price wins"
-          startFrame={380}
-          duration={120}
-        />
-        <Caption
-          text="Intent matched! Solver delivers instantly on destination chain"
-          startFrame={560}
-          duration={120}
-        />
-        <Caption
-          text="No bridge selection, no path optimization — just express intent"
-          startFrame={740}
-          duration={120}
-        />
+        <TerminalDemo />
       </Sequence>
 
       {/* Outro: 50-60s */}
-      <Sequence from={1500} durationInFrames={300}>
+      <Sequence from={1290} durationInFrames={300}>
         <OutroCard />
       </Sequence>
     </AbsoluteFill>

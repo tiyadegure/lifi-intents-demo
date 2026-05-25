@@ -6,7 +6,7 @@ export const RemotionRoot: React.FC = () => {
     <Composition
       id="LifiIntentsDemo"
       component={Demo}
-      durationInFrames={2100}
+      durationInFrames={3741}
       fps={30}
       width={1920}
       height={1080}

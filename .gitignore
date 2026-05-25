@@ -2,7 +2,8 @@ node_modules/
 dist/
 .output/
 *.mp4
-*.png
+# Allow Web UI screenshots for README
+!remotion/public/recordings/*.png
 .DS_Store
 
 __pycache__/
