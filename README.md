@@ -243,7 +243,7 @@ lifi-intents-demo/
 ├── tests/                   # 366 tests (parser, policies, verdicts, API)
 ├── docs/                    # API reference, failure modes
 ├── examples/                # Usage examples (decision trace, doctor, presets)
-└── remotion/                # Demo video source (Remotion + React)
+└── screenshots/             # Web UI and CLI screenshots for README
 ```
 
 ---
@@ -256,7 +256,6 @@ lifi-intents-demo/
 - **Rich** — terminal UI (panels, tables, syntax highlighting)
 - **SQLite** — persistent quote history
 - **LI.FI Intents MCP** — cross-chain infrastructure (JSON-RPC over SSE)
-- **Remotion** — programmatic video generation for demo
 
 ---
 
