@@ -1,5 +1,6 @@
 """LI.FI Intents Agent — Web API server."""
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -16,7 +17,14 @@ import time
 from lifi_agent.agent import LifAgent, Intent, parse_intent, parse_intent_with_policy
 from lifi_agent.models import Policy
 
-app = FastAPI(title="LI.FI Intents Agent", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app):
+    # MCP connects lazily on first request
+    yield
+
+
+app = FastAPI(title="LI.FI Intents Agent", version="1.0.0", lifespan=lifespan)
 agent = LifAgent()
 
 # ── Reasoning trace storage ─────────────────────────────────────────
@@ -66,12 +74,6 @@ def _summarize_result(result: dict) -> str:
 
 
 # ── API Routes ──────────────────────────────────────────────────────
-
-@app.on_event("startup")
-async def startup():
-    # MCP connects lazily on first request
-    pass
-
 
 def ensure_connected():
     """Lazy MCP connection (auto-fallback to mock mode if local MCP unavailable)."""

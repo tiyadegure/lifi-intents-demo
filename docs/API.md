@@ -52,16 +52,16 @@ List all demo presets with intent + policy config.
 ```
 
 **Available presets:**
-- `safe-transfer` — Basic transfer, fee < 0.5% → EXECUTABLE
-- `fee-check` — Ethereum → Base, fee < 0.3% → EXECUTABLE
-- `health-check` — Requires route health → REFUSED
-- `avoid-chain` — Avoids Arbitrum (destination) → REFUSED
-- `cheapest-route` — Prefers cheapest solver → EXECUTABLE
-- `no-quote` — Unusual chain pair, graceful failure → REFUSED
-- `strict-fee-check` — Fee < 0.1%, likely REFUSED
-- `fee-too-high` — Fee < 0.01%, always REFUSED
-- `min-output` — Output ≥ 9.99, edge-case REFUSED
-- `multi-constraint` — Fee + avoid + min output combined → REFUSED
+- `safe-transfer` — Base → Arbitrum WETH, fee < 0.5% → EXECUTABLE
+- `fee-check` — Base → Arbitrum WETH, fee < 0.3% → EXECUTABLE
+- `cheapest-route` — Base → Arbitrum WETH, prefer cheapest, fee < 1% → EXECUTABLE
+- `health-check` — Base → Arbitrum WETH, requires route health → REFUSED
+- `avoid-chain` — Base → Arbitrum WETH, avoids Arbitrum → REFUSED
+- `no-quote` — Base → zkSync USDC, no quote available → REFUSED
+- `strict-fee-check` — Base → Arbitrum WETH, fee < 0.1% → REFUSED
+- `fee-too-high` — Base → Arbitrum WETH, fee < 0.01% → REFUSED
+- `min-output` — Base → Arbitrum WETH, min output 9999 → REFUSED
+- `multi-constraint` — Fee + avoid chains + min output combined → REFUSED
 
 ---
 

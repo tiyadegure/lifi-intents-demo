@@ -80,15 +80,15 @@ Test different scenarios with one click:
 | Preset | Intent | Expected |
 |--------|--------|----------|
 | 🟢 `safe-transfer` | 0.001 WETH Base→Arbitrum, fee<0.5% | EXECUTABLE |
-| 🟢 `fee-check` | 10 USDC Base→Arbitrum, fee<0.5% | EXECUTABLE |
-| 🟢 `cheapest-route` | 1 USDC Base→Arbitrum, cheapest | EXECUTABLE |
-| 🔴 `health-check` | 10 USDC Base→Arbitrum, healthy route required | REFUSED |
-| 🔴 `avoid-chain` | 10 USDC Base→Tron, avoid Tron | REFUSED |
-| 🔴 `no-quote` | 0.001 WETH Base→Arbitrum, no quote available | REFUSED |
-| 🔴 `strict-fee-check` | 10 USDC Base→Arbitrum, fee<0.01% | REFUSED |
-| 🔴 `fee-too-high` | 100 USDC Base→Arbitrum, fee<0.1% | REFUSED |
-| 🔴 `min-output` | 10 USDC Base→Arbitrum, min 9.99 output | REFUSED |
-| 🔴 `multi-constraint` | 10 USDC Base→Arbitrum, multiple constraints | REFUSED |
+| 🟢 `fee-check` | 0.001 WETH Base→Arbitrum, fee<0.3% | EXECUTABLE |
+| 🟢 `cheapest-route` | 0.001 WETH Base→Arbitrum, prefer cheapest, fee<1% | EXECUTABLE |
+| 🔴 `health-check` | 0.001 WETH Base→Arbitrum, healthy route required | REFUSED |
+| 🔴 `avoid-chain` | 0.001 WETH Base→Arbitrum, avoid Arbitrum | REFUSED |
+| 🔴 `no-quote` | 5 USDC Base→zkSync, no quote available | REFUSED |
+| 🔴 `strict-fee-check` | 0.001 WETH Base→Arbitrum, fee<0.1% | REFUSED |
+| 🔴 `fee-too-high` | 0.001 WETH Base→Arbitrum, fee<0.01% | REFUSED |
+| 🔴 `min-output` | 0.001 WETH Base→Arbitrum, min 9999 output | REFUSED |
+| 🔴 `multi-constraint` | 0.001 WETH Base→Arbitrum, fee<0.5% + avoid eth/poly + min 9999 | REFUSED |
 
 ---
 
@@ -192,17 +192,9 @@ lifi-agent
 ### Run Web UI
 
 ```bash
-cd demo
-npm install
-npm run dev
+pip install -e ".[web]"
+uvicorn lifi_agent.server:app --port 8888
 # Open http://localhost:8888
-```
-
-### Run MCP Server (local)
-
-```bash
-# Start local MCP server on port 3333
-python -m lifi_agent.mcp_server
 ```
 
 ### Run Tests
@@ -219,15 +211,14 @@ pytest tests/ -v
 ```
 lifi-intents-demo/
 ├── lifi_agent/              # Core Python package
+│   ├── agent.py             # Agent logic + interactive CLI
+│   ├── models.py            # Data models, chain registry, amount conversion
 │   ├── parser.py            # Intent parser (regex + LLM fallback)
-│   ├── policy.py            # Policy engine (fee, health, chain constraints)
-│   ├── verdict.py           # Decision engine (EXECUTABLE / REFUSED)
-│   ├── mcp_client.py        # MCP server client
-│   ├── mcp_server.py        # Local MCP server (port 3333)
-│   └── cli.py               # Interactive CLI
-├── demo/                    # Web UI (Next.js + Tailwind)
-│   └── app/                 # Next.js app router
-├── tests/                   # 366 tests (parser, policy, verdict, API)
+│   ├── mcp_client.py        # MCP client (session, caching, rate limiting)
+│   ├── server.py            # FastAPI web API + HTML UI
+│   ├── store.py             # SQLite quote history
+│   └── templates/index.html # Web UI template
+├── tests/                   # 366 tests (parser, policies, verdicts, API)
 ├── docs/                    # API reference, failure modes
 ├── PITFALLS.md              # 10 real pitfalls building against LI.FI Intents
 └── remotion/                # Demo video source (Remotion + React)
