@@ -54,6 +54,11 @@ Policy violation detected: fee too high or route unavailable. Verdict: **REFUSED
 
 Live verification panel: connected to real MCP server, 75 routes available, latest quote with fee and verdict.
 
+### CLI — Interactive Terminal
+![CLI](remotion/public/recordings/cli-demo.png)
+
+Rich-formatted terminal with colored output: green ✓ for passed checks, red ✗ for policy violations, verdict panels with reasoning.
+
 ---
 
 ## Features

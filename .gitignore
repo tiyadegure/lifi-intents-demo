@@ -33,7 +33,7 @@ submission/
 
 # Reference materials (not for submission)
 docs/ui-reference/
-recordings/
+/recordings/
 
 # Demo temp files
 demo/frame*.png
