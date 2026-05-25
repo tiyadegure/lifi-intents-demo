@@ -20,15 +20,15 @@ send 0.001 WETH from Base to Arbitrum only if route is healthy and fee < 0.5%
 The system runs a **Safe Verdict Pipeline**:
 
 1. **Parse Intent** — extract amount, token, source/destination chains
-2. **Parse Policy** — extract constraints: max fee, route health requirement, chain filters
+2. **Parse Policy** — extract constraints: max fee, route health, chain filters, min output
 3. **Check Supported Route** — call `get-supported-routes` via MCP
 4. **Check Route Health** — call `check-route-health` (if policy requires it)
 5. **Request Quote** — call `request-quote` for real-time solver pricing
-6. **Calculate Fee** — compute actual fee percentage
+6. **Calculate Fee** — compute actual fee percentage from input/output
 7. **Evaluate Policy** — compare against all constraints
 8. **Return Verdict** — ✅ EXECUTABLE or 🚫 REFUSED with detailed reasoning
 
-Every step is logged in a **Decision Trace** with tool names, timing, and results.
+Every step is logged in a **Decision Trace** with MCP tool names, input/output, timing, and reasoning.
 
 ---
 
@@ -37,7 +37,7 @@ Every step is logged in a **Decision Trace** with tool names, timing, and result
 ### Web Interface — Homepage
 ![Homepage](remotion/public/recordings/ui-homepage.png)
 
-Three-column layout: **Intent Input** (parsed natural language) → **Structured Output** (MCP parameters) → **Decision Trace** (solver-aware checks).
+Three-column layout: **Intent Input** (parsed natural language) → **Structured Output** (MCP parameters) → **Decision Trace** (solver-aware checks with timing).
 
 ### Decision Trace — EXECUTABLE ✅
 ![Executable](remotion/public/recordings/ui-result-executable.png)
@@ -47,12 +47,12 @@ All checks passed: route supported, route healthy, fee 0.20% within 0.5% limit. 
 ### Decision Trace — REFUSED 🚫
 ![Refused](remotion/public/recordings/ui-result-refused.png)
 
-Policy violation detected: fee too high or no solver coverage. Verdict: **REFUSED** with detailed reasoning.
+Policy violation detected: fee too high or route unavailable. Verdict: **REFUSED** with detailed reasoning.
 
 ### MCP Proof — Real Server Connection
 ![MCP Proof](remotion/public/recordings/ui-mcp-proof.png)
 
-Live verification panel showing: connected to real MCP server, 75 routes available, latest quote with fee and verdict.
+Live verification panel: connected to real MCP server, 75 routes available, latest quote with fee and verdict.
 
 ---
 
@@ -60,16 +60,19 @@ Live verification panel showing: connected to real MCP server, 75 routes availab
 
 | Feature | Description |
 |---------|-------------|
-| 🛡️ **Safe Verdict** | Policy-driven EXECUTABLE / REFUSED decisions with reasoning |
-| 📊 **Decision Trace** | Step-by-step audit log with MCP tool names, timing, and results |
-| 🔌 **MCP Integration** | Real connection to LI.FI Intents MCP server (75 routes) |
-| 🎯 **10 Policy Presets** | One-click testing for different scenarios |
-| 🌐 **Web UI** | Three-column layout with live analysis |
-| 💻 **CLI** | Interactive terminal with rich formatting |
-| 🔍 **MCP Proof** | Live server verification with route count and quote data |
-| 🧑‍⚖️ **Judge Mode** | Compare expected vs actual verdicts |
-| 📋 **Preset Report** | Batch test all presets with pass/fail summary |
-| 🧪 **366 Tests** | Full test coverage for parser, policies, verdicts, and API |
+| 🛡️ **Safe Verdict** | Policy-driven EXECUTABLE / REFUSED decisions with step-by-step reasoning |
+| 📊 **Decision Trace** | Full audit log — every MCP call shows Purpose, Input, Output, Why |
+| 🔌 **MCP Integration** | Real connection to LI.FI Intents MCP server (75 cross-chain routes) |
+| 🔍 **MCP Call Inspector** | Each trace step expands to show raw MCP tool call details |
+| 🎯 **10 Policy Presets** | One-click scenarios: safe-transfer, fee-check, avoid-chain, health-check, etc. |
+| 🧑‍⚖️ **Judge Mode** | Run 5 key presets and compare expected vs actual verdicts |
+| 📋 **Preset Report** | Batch test all 10 presets with pass/fail summary |
+| 🌐 **Web UI** | Three-column layout with live analysis and real-time verdicts |
+| 💻 **CLI** | Interactive terminal with Rich formatting and colored output |
+| 🔍 **MCP Proof** | Live verification panel proving real server connection |
+| 🩺 **Doctor** | Diagnostic checks for MCP connectivity, routes, and solver health |
+| ⚖️ **Quote Compare** | Compare quotes across multiple destination chains |
+| 🧪 **366 Tests** | Full coverage: parser, policies, verdicts, API endpoints, edge cases |
 
 ---
 
@@ -89,6 +92,8 @@ Test different scenarios with one click:
 | 🔴 `fee-too-high` | 0.001 WETH Base→Arbitrum, fee<0.01% | REFUSED |
 | 🔴 `min-output` | 0.001 WETH Base→Arbitrum, min 9999 output | REFUSED |
 | 🔴 `multi-constraint` | 0.001 WETH Base→Arbitrum, fee<0.5% + avoid eth/poly + min 9999 | REFUSED |
+
+**Judge Mode** runs 5 key presets and shows expected vs actual — instant confidence that the verdict engine is working correctly.
 
 ---
 
@@ -115,17 +120,20 @@ Test different scenarios with one click:
 |------|---------|
 | `get-supported-routes` | Discover available cross-chain routes |
 | `check-route-health` | Verify solver coverage and recent order activity |
-| `request-quote` | Get real-time solver quotes |
+| `request-quote` | Get real-time solver quotes with pricing |
 | `prepare-order` | Build order structure for execution |
 | `track-order` | Monitor order status |
+| `get-solver-identities` | List registered solver wallets |
+| `get-quote-inventory` | View standing quotes for a route |
 
 ### Three MCP Modes
 
-| Mode | Description | Use case |
-|------|-------------|----------|
-| **Local MCP** | Connect to local MCP server (localhost:3333) | Development, real solver data |
-| **Mock Fallback** | Auto-fallback to mock if MCP unavailable | Demo, offline testing |
-| **Strict** | Require real MCP, no fallback | Production, CI/CD |
+| Mode | Env Var | Description |
+|------|---------|-------------|
+| **Local MCP** | *(default)* | Connect to local MCP server, real solver data |
+| **Mock Fallback** | auto | Falls back to mock if MCP unavailable |
+| **Mock Forced** | `LIFI_AGENT_MOCK_MODE=1` | Always use mock data |
+| **Strict** | `LIFI_AGENT_STRICT_MODE=1` | Require real MCP, no fallback |
 
 ---
 
@@ -203,6 +211,16 @@ pytest tests/ -v
 # 366 tests, all passing
 ```
 
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LIFI_MCP_URL` | `http://localhost:3333/mcp` | MCP server endpoint |
+| `SOLVER_API_KEY` | *(none)* | Solver API key for route health checks |
+| `LIFI_AGENT_MOCK_MODE` | `0` | Force mock mode (`1` to enable) |
+| `LIFI_AGENT_STRICT_MODE` | `0` | Require real MCP, no fallback (`1` to enable) |
+| `DEMO_ADDRESS` | `0x0000...0000` | Default wallet address for quotes |
+
 ---
 
 ## Project Structure
@@ -210,13 +228,13 @@ pytest tests/ -v
 ```
 lifi-intents-demo/
 ├── lifi_agent/              # Core Python package
-│   ├── agent.py             # Agent logic + interactive CLI
+│   ├── agent.py             # Agent logic + Safe Verdict + interactive CLI
 │   ├── models.py            # Data models, chain registry, amount conversion
 │   ├── parser.py            # Intent parser (regex + LLM fallback)
 │   ├── mcp_client.py        # MCP client (session, caching, rate limiting)
-│   ├── server.py            # FastAPI web API + HTML UI
+│   ├── server.py            # FastAPI web API + presets + judge mode
 │   ├── store.py             # SQLite quote history
-│   └── templates/index.html # Web UI template
+│   └── templates/index.html # Web UI (single-file HTML + JS)
 ├── tests/                   # 366 tests (parser, policies, verdicts, API)
 ├── docs/                    # API reference, failure modes
 ├── examples/                # Usage examples (decision trace, doctor, presets)
@@ -225,14 +243,27 @@ lifi-intents-demo/
 
 ---
 
+## Tech Stack
+
+- **Python 3.10+** — core language
+- **FastAPI** — web API server
+- **httpx** — HTTP client with connection pooling
+- **Rich** — terminal UI (panels, tables, syntax highlighting)
+- **SQLite** — persistent quote history
+- **LI.FI Intents MCP** — cross-chain infrastructure (JSON-RPC over SSE)
+- **Remotion** — programmatic video generation for demo
+
+---
+
 ## Key Design Decisions
 
 1. **Deterministic parser by default** — regex engine, zero API keys, consistent output
 2. **Policy-first architecture** — constraints extracted before any MCP calls
 3. **Visible decision trace** — every step logged with tool name, timing, and result
-4. **Three-mode MCP** — Local MCP → Mock Fallback → Strict, configurable via env var
-5. **No real wallet execution** — this is a decision engine, not a transaction executor
-6. **MCP Proof panel** — live verification that you're connected to a real server
+4. **MCP Call Inspector** — each step expands to show raw tool input/output/reasoning
+5. **Three-mode MCP** — Local MCP → Mock Fallback → Strict, configurable via env var
+6. **No real wallet execution** — this is a decision engine, not a transaction executor
+7. **MCP Proof panel** — live verification that you're connected to a real server
 
 ---
 
@@ -250,9 +281,10 @@ AI Agents need safe, auditable cross-chain decisions — not just "get me a quot
 LI.FI Intents MCP provides the infrastructure. This project shows how to build on it:
 
 - **Policy-driven** — users define constraints, agents enforce them
-- **Auditable** — every decision step is logged with timing and tool names
-- **Safe by default** — EXECUTABLE only when all checks pass
-- **Developer-friendly** — Web UI, CLI, presets, tests, documentation
+- **Auditable** — every decision step is logged with timing, tool names, and reasoning
+- **Safe by default** — EXECUTABLE only when all checks pass; REFUSED otherwise
+- **Developer-friendly** — Web UI, CLI, presets, judge mode, 366 tests
+- **MCP-native** — built directly on the LI.FI Intents MCP protocol
 
 ---
 
