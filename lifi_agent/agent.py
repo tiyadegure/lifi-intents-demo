@@ -12,9 +12,8 @@ import os
 import re
 import time
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 from pathlib import Path
-from datetime import datetime
 
 from .mcp_client import MCPClient
 from .models import (
@@ -23,7 +22,7 @@ from .models import (
     Intent, Policy, Verdict, DecisionStep, DecisionResult,
 )
 from .parser import parse_policy, parse_intent, parse_intent_with_policy, parse_intent_llm
-from .store import QuoteStore, get_quote_store
+from .store import get_quote_store
 
 # ── Rich TUI ──────────────────────────────────────────────────────
 from rich.console import Console

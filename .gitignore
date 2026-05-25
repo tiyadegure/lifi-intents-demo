@@ -13,6 +13,23 @@ __pycache__/
 *.egg-info/
 *.db
 .lifi_agent_prefs.json
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Internal planning docs (not for submission)
+PITFALLS.md
+PLAN.md
+SUBMISSION*.md
+article.md
+x_thread*.md
+record_demo.sh
+submission/
 
 # Reference materials (not for submission)
 docs/ui-reference/
@@ -23,6 +40,8 @@ demo/frame*.png
 demo/0[0-9]_*.png
 demo/demo.gif
 demo/*_demo.py
+demo/filelist.txt
+demo/video_list.txt
 process-cast.py
 record-demo.sh
 
@@ -33,12 +52,14 @@ remotion/public/audio/sfx/
 remotion/public/audio/02_question.mp3
 remotion/public/audio/03_connecting.mp3
 remotion/public/audio/04_routes.mp3
+remotion/public/audio/04_cli_trimmed.mp3
 remotion/public/audio/05_quote.mp3
 remotion/public/audio/05_verdict_ok.ogg
 remotion/public/audio/06_explain.mp3
 remotion/public/audio/07_presets.mp3
 remotion/public/audio/07_mcp.mp3
 remotion/public/audio/08_arch.mp3
+remotion/public/audio/08_arch_trimmed.mp3
 remotion/public/audio/08_closing.mp3
 
 # Remotion temp recordings
