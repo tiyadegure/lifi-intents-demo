@@ -243,6 +243,7 @@ lifi-intents-demo/
 ├── tests/                   # 366 tests (parser, policies, verdicts, API)
 ├── docs/                    # API reference, failure modes
 ├── examples/                # Usage examples (decision trace, doctor, presets)
+├── PITFALLS.md              # 10 pitfalls building on LI.FI Intents MCP
 └── screenshots/             # Web UI and CLI screenshots for README
 ```
 
@@ -275,6 +276,7 @@ lifi-intents-demo/
 
 - [API Reference](docs/API.md) — All endpoints and response formats
 - [Failure Modes](docs/FAILURE-MODES.md) — How the system handles errors
+- [10 Pitfalls](PITFALLS.md) — Real gotchas building on LI.FI Intents MCP
 
 ---
 

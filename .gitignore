@@ -23,7 +23,6 @@ __pycache__/
 *~
 
 # Internal planning docs (not for submission)
-PITFALLS.md
 PLAN.md
 SUBMISSION*.md
 article.md
