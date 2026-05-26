@@ -235,8 +235,8 @@
   <!-- Intent Input -->
   <div class="input-section">
     <div class="input-row">
-      <input type="text" id="intentInput" placeholder="send 0.001 WETH from Base to Arbitrum only if fee < 0.5%"
-             value="send 0.001 WETH from Base to Arbitrum only if fee < 0.5%">
+      <input type="text" id="intentInput" placeholder="send 10 USDC from Base to Arbitrum only if fee < 2%"
+             value="send 10 USDC from Base to Arbitrum only if fee < 2%">
       <button class="btn" id="analyzeBtn" onclick="analyzeIntent()">Analyze</button>
     </div>
     <div class="preset-section">
@@ -711,7 +711,7 @@ async function loadProof(){
     html+='<div class="proof-row"><span class="proof-label">Mode</span><span class="proof-value">'+escapeHtml(d.mode||'?')+'</span></div>';
     html+='<div class="proof-row"><span class="proof-label">Server</span><span class="proof-value">'+escapeHtml(d.mcp_server||'?')+'</span></div>';
     html+='<div class="proof-row"><span class="proof-label">Endpoint</span><span class="proof-value">'+escapeHtml(d.endpoint||'?')+'</span></div>';
-    html+='<div class="proof-row"><span class="proof-label">Routes</span><span class="proof-value">'+(d.routes_count||0)+' routes</span></div>';
+    html+='<div class="proof-row"><span class="proof-label">Routes</span><span class="proof-value">'+(d.routes_count > 0 ? d.routes_count+' routes' : 'API returns empty (LI.FI issue)')+'</span></div>';
     if(d.last_quote&&!d.last_quote.error){
       var q=d.last_quote;
       html+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-subtle)">';

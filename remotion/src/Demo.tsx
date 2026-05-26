@@ -846,19 +846,18 @@ const CloseScene: React.FC = () => {
 // MAIN COMPOSITION
 // ═══════════════════════════════════════════════
 export const Demo: React.FC = () => {
-  // Scene timing — natural MiMo TTS (Dean, speed=1.2)
+  // Scene timing — v6 MiMo TTS (Dean, speed=1.2), 9 scenes, ~62s total
   // Scene durations in frames (30fps):
   const scenes = [
-    { start: 0,    dur: 342,  Component: TitleScene },
-    { start: 342,  dur: 328,  Component: WebUIHomeScene },
-    { start: 670,  dur: 303,  Component: WebUIPresetsScene },
-    { start: 973,  dur: 200,  Component: WebUITraceScene },
-    { start: 1173, dur: 310,  Component: CLIScene },
-    { start: 1483, dur: 524,  Component: VerdictPassScene },
-    { start: 2007, dur: 582,  Component: VerdictFailScene },
-    { start: 2589, dur: 300,  Component: MCPProofScene },
-    { start: 2889, dur: 400,  Component: ArchScene },
-    { start: 3289, dur: 452,  Component: CloseScene },
+    { start: 0,    dur: 150,  Component: TitleScene },       // 5s
+    { start: 150,  dur: 240,  Component: WebUIHomeScene },    // 8s
+    { start: 390,  dur: 210,  Component: WebUIPresetsScene }, // 7s
+    { start: 600,  dur: 210,  Component: CLIScene },          // 7s
+    { start: 810,  dur: 210,  Component: VerdictPassScene },  // 7s
+    { start: 1020, dur: 210,  Component: VerdictFailScene },  // 7s
+    { start: 1230, dur: 210,  Component: MCPProofScene },     // 7s
+    { start: 1440, dur: 210,  Component: ArchScene },         // 7s
+    { start: 1650, dur: 210,  Component: CloseScene },        // 7s
   ];
 
   const totalFrames = scenes[scenes.length - 1].start + scenes[scenes.length - 1].dur;
@@ -867,19 +866,18 @@ export const Demo: React.FC = () => {
     <AbsoluteFill style={{ backgroundColor: C.bg }}>
       <AudioMix />
 
-      {/* Narration audio — MiMo TTS (Dean, speed=1.2)
+      {/* Narration audio — v6 MiMo TTS (Dean, speed=1.2)
           Each audio starts at its scene's exact start frame.
-          Audio trimmed to fit scene duration — NO overlap. */}
-      <Sequence from={0}><Audio src={staticFile("audio/01_intro.mp3")} /></Sequence>          {/* TitleScene 0-342 (11.4s) */}
-      <Sequence from={342}><Audio src={staticFile("audio/02_webui.mp3")} /></Sequence>        {/* WebUIHome 342-670 (10.9s) */}
-      <Sequence from={670}><Audio src={staticFile("audio/03_preset.mp3")} /></Sequence>       {/* WebUIPresets 670-973 (10.1s) */}
-      {/* WebUITraceScene 973-1173: visual-only, no narration */}
-      <Sequence from={1173}><Audio src={staticFile("audio/04_cli_trimmed.mp3")} /></Sequence>   {/* CLIScene 1173-1483 (10s trimmed) */}
-      <Sequence from={1483}><Audio src={staticFile("audio/05_verdict_ok.mp3")} /></Sequence>  {/* VerdictPass 1483-2007 (12.7s) */}
-      <Sequence from={2007}><Audio src={staticFile("audio/06_verdict_no.mp3")} /></Sequence>  {/* VerdictFail 2007-2589 (19.4s) */}
-      <Sequence from={2589}><Audio src={staticFile("audio/07_mcp_proof.mp3")} /></Sequence>   {/* MCPProof 2589-2889 (9.5s trimmed) */}
-      <Sequence from={2889}><Audio src={staticFile("audio/08_arch_trimmed.mp3")} /></Sequence> {/* ArchScene 2889-3289 (13s trimmed) */}
-      <Sequence from={3289}><Audio src={staticFile("audio/09_closing.mp3")} /></Sequence>     {/* CloseScene 3289-3741 (15.1s) */}
+          Audio pre-trimmed to fit scene duration — NO overlap. */}
+      <Sequence from={0}><Audio src={staticFile("audio/v6_01_title.mp3")} /></Sequence>
+      <Sequence from={150}><Audio src={staticFile("audio/v6_02_webui.mp3")} /></Sequence>
+      <Sequence from={390}><Audio src={staticFile("audio/v6_03_presets.mp3")} /></Sequence>
+      <Sequence from={600}><Audio src={staticFile("audio/v6_04_cli.mp3")} /></Sequence>
+      <Sequence from={810}><Audio src={staticFile("audio/v6_05_pass.mp3")} /></Sequence>
+      <Sequence from={1020}><Audio src={staticFile("audio/v6_06_fail.mp3")} /></Sequence>
+      <Sequence from={1230}><Audio src={staticFile("audio/v6_07_mcp.mp3")} /></Sequence>
+      <Sequence from={1440}><Audio src={staticFile("audio/v6_08_arch.mp3")} /></Sequence>
+      <Sequence from={1650}><Audio src={staticFile("audio/v6_09_close.mp3")} /></Sequence>
 
       {/* Scenes with fade transitions */}
       {scenes.map((scene, i) => (

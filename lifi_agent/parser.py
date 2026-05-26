@@ -127,7 +127,7 @@ def parse_intent(text: str) -> Intent:
     if not amount_match:
         raise ValueError("Couldn't find amount and token. Try: 'send 10 USDC from Base to Arbitrum'")
     amount = amount_match.group(1)
-    token = amount_match.group(2).replace("weth", "eth")
+    token = amount_match.group(2)  # Keep weth as-is, MCP expects WETH
 
     # Extract chains by position in text (earliest = from, latest = to)
     chain_positions = []
