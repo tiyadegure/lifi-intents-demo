@@ -85,6 +85,18 @@ def ensure_connected():
                         print("MCP: local server not available, using mock mode")
                     else:
                         print("MCP: connected to local server")
+                        # Warmup: prime routes cache (first call may return empty due to cold start)
+                        try:
+                            import time as _t
+                            for _attempt in range(3):
+                                result = agent.mcp.call("get-supported-routes", {}, use_cache=False)
+                                routes = result.get("data", {}).get("routes", [])
+                                if routes:
+                                    print(f"MCP: warmed up with {len(routes)} routes")
+                                    break
+                                _t.sleep(1)
+                        except Exception:
+                            pass  # warmup is best-effort
                 except Exception as e:
                     print(f"MCP connect failed: {e}")
 

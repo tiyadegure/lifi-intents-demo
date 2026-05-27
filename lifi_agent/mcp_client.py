@@ -62,6 +62,12 @@ class MCPClient:
             for k in sorted_keys[:len(self._cache) - MAX_CACHE_SIZE]:
                 del self._cache[k]
 
+    @staticmethod
+    def _has_empty_routes(data: dict) -> bool:
+        """Check if response contains an empty routes list (cold start artifact)."""
+        routes = data.get("data", {}).get("routes", [])
+        return isinstance(routes, list) and len(routes) == 0
+
     @property
     def client(self) -> httpx.Client:
         """Lazy-init sync client with connection pooling."""
@@ -384,7 +390,7 @@ class MCPClient:
                 return {"error": f"HTTP {r.status_code}", "body": r.text[:500]}
 
             data = self._parse_sse(r.text)
-            if "error" not in data:
+            if "error" not in data and not self._has_empty_routes(data):
                 self._cache[cache_key] = (time.time(), data)
             return data
 
@@ -449,7 +455,7 @@ class MCPClient:
                 return {"error": f"HTTP {r.status_code}", "body": r.text[:500]}
 
             data = self._parse_sse(r.text)
-            if "error" not in data:
+            if "error" not in data and not self._has_empty_routes(data):
                 self._cache[cache_key] = (time.time(), data)
             return data
 
